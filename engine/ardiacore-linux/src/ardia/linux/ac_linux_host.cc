@@ -989,6 +989,8 @@ class TabBinding : public content::WebContentsObserver {
   std::unique_ptr<ardiacore::LinuxPageState> TakePage();
   std::vector<int> replaced_ids;
   void ReportPresentation(std::string name, base::DictValue data);
+  bool PresentNow(std::string name, base::DictValue data);
+  void ReportWoke();
   void ReportOpened(content::WebContents* opened, const GURL& url, std::string_view disposition, bool link = false);
   base::WeakPtr<TabBinding> GetWeakPtr() { return weak_factory_.GetWeakPtr(); }
   void MoveTo(ShellHostView* owner);
@@ -1006,6 +1008,7 @@ class TabBinding : public content::WebContentsObserver {
   std::unique_ptr<ardiacore::LinuxPageMedia> media;
   bool frozen = false;
   bool discard_reported = false;
+  bool wake_ready_pending = false;
   std::unique_ptr<ardiacore::LinuxPageCommands> page_commands;
   std::optional<ardiacore::LinuxPageRequest> page_command_request;
   std::unique_ptr<DevToolsFrontendWatch> devtools_watch;
@@ -7560,7 +7563,16 @@ void TabBinding::RetirePage() {
 }
 
 void TabBinding::ReportPresentation(std::string name, base::DictValue data) {
-  if (page_) page_->EmitPresentation(std::move(name), base::Value(std::move(data)));
+  PresentNow(std::move(name), std::move(data));
+}
+
+bool TabBinding::PresentNow(std::string name, base::DictValue data) {
+  return page_ && page_->EmitPresentation(std::move(name), base::Value(std::move(data)));
+}
+
+void TabBinding::ReportWoke() {
+  if (!wake_ready_pending) return;
+  wake_ready_pending = !PresentNow("ready", base::DictValue());
 }
 
 void TabBinding::StartMedia() {
@@ -7623,13 +7635,14 @@ std::vector<std::pair<std::string, base::Value>> TabBinding::SnapshotExtras() {
 void TabBinding::WasDiscarded() {
   if (!contents_ || discard_reported || !contents_->WasDiscarded()) return;
   discard_reported = true;
+  wake_ready_pending = false;
   ReportPresentation("discarded", base::DictValue().Set("url", DiscardedUrl(contents_)));
 }
 
 void TabBinding::DidStartNavigation(content::NavigationHandle* handle) {
   if (!contents_ || !discard_reported || !handle->IsInPrimaryMainFrame() || contents_->WasDiscarded()) return;
   discard_reported = false;
-  ReportPresentation("ready", base::DictValue());
+  wake_ready_pending = !PresentNow("ready", base::DictValue());
 }
 
 void TabBinding::Rebind(content::WebContents* contents) {
@@ -7651,6 +7664,7 @@ void TabBinding::Rebind(content::WebContents* contents) {
   contents_ = contents;
   frozen = false;
   discard_reported = false;
+  wake_ready_pending = false;
   StartMedia();
   ardiacore::TrackLinuxAutofillFocus(contents_);
   if (viewport_ && viewport_->GetVisible()) viewport_->SetWebContents(contents);
@@ -7771,6 +7785,10 @@ void TabBinding::DidFinishNavigation(content::NavigationHandle* handle) {
     const net::HttpResponseHeaders* headers = handle->GetResponseHeaders();
     commits_.Note(static_cast<double>(base::Time::Now().InMillisecondsSinceUnixEpoch()),
                   headers ? headers->response_code() : 0);
+    if (wake_ready_pending) {
+      base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
+          FROM_HERE, base::BindOnce(&TabBinding::ReportWoke, GetWeakPtr()));
+    }
   }
   ReportNavigation();
 }
