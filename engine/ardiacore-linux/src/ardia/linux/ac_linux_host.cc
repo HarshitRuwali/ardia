@@ -25,6 +25,7 @@
 #include "ardia/linux/ac_linux_report_core.h"
 #include "ardia/linux/ac_linux_sidebar_edge.h"
 #include "ardia/linux/ac_linux_status_geometry.h"
+#include "ardia/linux/ac_linux_switcher_keys.h"
 #include "ardia/linux/ac_linux_auto_pip_service.h"
 #include "ardia/linux/ac_linux_automation_window.h"
 #include "ardia/linux/ac_linux_capture.h"
@@ -4576,11 +4577,12 @@ bool ShellHostView::AcceleratorPressed(const ui::Accelerator& accelerator) {
   const base::DictValue& binding = found->second;
   const std::string command = String(binding, "command");
   if (switcher_capture_) {
-    std::string key;
-    if (accelerator.key_code() == ui::VKEY_ESCAPE) key = "escape";
-    if (accelerator.key_code() == ui::VKEY_RIGHT) key = "next";
-    if (accelerator.key_code() == ui::VKEY_LEFT) key = "previous";
-    if (!key.empty()) {
+    const char* key = ardia::linux_switcher::SwitcherKey({.key_code = accelerator.key_code(),
+                                                          .control = accelerator.IsCtrlDown(),
+                                                          .alt = accelerator.IsAltDown(),
+                                                          .command = accelerator.IsCmdDown(),
+                                                          .repeat = accelerator.IsRepeat()});
+    if (key) {
       Event("ArdiaShell", "onAppEvent", base::Value(base::DictValue()
           .Set("type", "switcherKey").Set("key", key)));
       return true;
