@@ -18,6 +18,7 @@ export function introMusicSilenced(host?: ArdiaHost): boolean {
 
 export function linuxIntroMusic({ host, track = bundledTrack, createPlayer = (src) => new Audio(src), onPlayed }: IntroMusicOptions = {}) {
   let playing: Player | null = null;
+  let request = 0;
   let fading: ReturnType<typeof setInterval> | undefined;
 
   const fade = (target: number, seconds: number, stopAfter: boolean) => {
@@ -47,7 +48,9 @@ export function linuxIntroMusic({ host, track = bundledTrack, createPlayer = (sr
   return {
     playIntroMusic: async (_cues: unknown, muted: unknown) => {
       if (introMusicSilenced(host)) return;
+      const mine = ++request;
       const src = await track().catch(() => null);
+      if (mine !== request) return;
       if (!src) return onPlayed?.(false);
       clearInterval(fading);
       playing?.pause();
@@ -67,6 +70,9 @@ export function linuxIntroMusic({ host, track = bundledTrack, createPlayer = (sr
       );
     },
     setIntroMusicMuted: async (muted: unknown) => fade(muted === true ? 0 : 1, MUTE_FADE_SECONDS, false),
-    stopIntroMusic: async (seconds: unknown) => fade(0, Math.max(0, Number(seconds) || 0), true),
+    stopIntroMusic: async (seconds: unknown) => {
+      request++;
+      fade(0, Math.max(0, Number(seconds) || 0), true);
+    },
   };
 }

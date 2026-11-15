@@ -53,3 +53,22 @@ test("the shell answers ArdiaApp's intro music calls itself instead of dropping 
   }
   assert.equal(linuxModuleMethod(host, "ArdiaApp", "playIntroMusic"), linuxModuleMethod(host, "ArdiaApp", "playIntroMusic"));
 });
+
+test("an intro skipped while its track is still loading never starts the music", async () => {
+  players.length = 0;
+  const played = [];
+  let loaded;
+  const slowTrack = () => new Promise((resolve) => (loaded = resolve));
+  const music = linuxIntroMusic({ host: hostWith({}), track: slowTrack, createPlayer, onPlayed: (ok) => played.push(ok) });
+  const playing = music.playIntroMusic({}, false);
+  await music.stopIntroMusic(0.4);
+  loaded("/assets/IntroMusic-test.wav");
+  await playing;
+  assert.equal(players.length, 0);
+  assert.deepEqual(played, []);
+  const again = music.playIntroMusic({}, false);
+  loaded("/assets/IntroMusic-test.wav");
+  await again;
+  assert.equal(players.length, 1, "a play after the skip still plays");
+  assert.deepEqual(played, [true]);
+});
