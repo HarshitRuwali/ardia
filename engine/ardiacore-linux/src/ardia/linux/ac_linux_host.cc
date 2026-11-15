@@ -104,6 +104,7 @@
 #include "ardia/linux/ac_linux_updates.h"
 #include "ardia/linux/ac_linux_password_prompt.h"
 #include "ardia/linux/ac_linux_system_signals.h"
+#include "ardia/linux/ac_linux_geoclue.h"
 #include "ardia/linux/ac_linux_typeahead_input.h"
 #include "ardia/linux/host_bootstrap.h"
 #include "base/auto_reset.h"
@@ -3135,6 +3136,8 @@ base::DictValue ShellHostView::Bootstrap() const {
       .Append("ArdiaSearch.suggest").Append("ArdiaSearch.cancelSuggest")
       .Append("ArdiaTelemetry.post")
       .Append("ArdiaShell.fetchKillSwitches")
+      .Append("ArdiaLocation.locationPermission")
+      .Append("ArdiaLocation.requestLocationPermission")
       .Append("ArdiaSystemSignals.watchIdle")
       .Append("ArdiaSystemSignals.devPost")
       .Append("ArdiaUpdates.releases")
@@ -6560,6 +6563,9 @@ void ShellHostView::Invoke(
         },
         std::move(done)));
   }
+  if (method == "ArdiaLocation.locationPermission" || method == "ArdiaLocation.requestLocationPermission") {
+    return std::move(done).Run(true, base::Value(ardia::LinuxLocationPermission()));
+  }
   if (method == "ArdiaSystemSignals.watchIdle") {
     if (values.size() != 1 || !values[0].is_list())
       return std::move(done).Run(false, base::Value("watchIdle takes a list of seconds"));
@@ -7990,6 +7996,7 @@ void StartLinuxHost() {
   g_ardia_auto_picture_in_picture_off = true;
   ardia::InstallCliVisibleTabs();
   ardia::linux_password::InstallReauthFallback();
+  ardia::InstallLinuxLocationProvider();
   g_ardia_linux_tab_shown = [](content::WebContents* contents) {
     for (const auto& [id, host] : Hosts()) {
       const int shown = host->TabShown(contents);

@@ -1,0 +1,72 @@
+import pathlib
+import shutil
+import subprocess
+import tempfile
+import unittest
+
+
+ROOT = pathlib.Path(__file__).resolve().parents[1]
+SOURCE = ROOT / 'src'
+LINUX = SOURCE / 'ardia' / 'linux'
+PATCHES = ROOT.parents[0] / 'patches'
+
+SCENARIOS = r'''#include <cassert>
+#include <cmath>
+#include <cstdio>
+#include <limits>
+#include "ardia/linux/ac_linux_geoclue_policy.h"
+using namespace ardia::linux_geoclue;
+
+int main() {
+  auto fix = FixFrom({{"Latitude", 48.8566}, {"Longitude", 2.3522}, {"Accuracy", 25}, {"Altitude", 35}, {"Heading", -1}, {"Speed", -1}});
+  assert(fix && fix->latitude == 48.8566 && fix->longitude == 2.3522 && fix->accuracy == 25);
+  assert(fix->altitude == 35 && !fix->heading && !fix->speed);
+  auto moving = FixFrom({{"Latitude", 1}, {"Longitude", 2}, {"Heading", 90}, {"Speed", 3}, {"Accuracy", -5}});
+  assert(moving && moving->heading == 90 && moving->speed == 3 && moving->accuracy == kDefaultAccuracyMeters);
+  assert(!FixFrom({{"Latitude", 1}}));
+  assert(!FixFrom({{"Latitude", 91}, {"Longitude", 0}}));
+  assert(!FixFrom({{"Latitude", 0}, {"Longitude", 181}}));
+  assert(!FixFrom({{"Latitude", std::numeric_limits<double>::quiet_NaN()}, {"Longitude", 0}}));
+  assert(!FixFrom({{"Latitude", -1.79769e308}, {"Longitude", 0}}));
+  auto no_altitude = FixFrom({{"Latitude", 0}, {"Longitude", 0}, {"Altitude", -1.79769e308}});
+  assert(no_altitude && !no_altitude->altitude);
+  assert(AccuracyLevel(true) == 8 && AccuracyLevel(false) == 4);
+  assert(DeniedByDesktop("org.freedesktop.DBus.Error.AccessDenied: Agent rejected 'ardia'"));
+  assert(DeniedByDesktop("Geolocation disabled for UID 1000"));
+  assert(!DeniedByDesktop("org.freedesktop.DBus.Error.ServiceUnknown: The name org.freedesktop.GeoClue2 was not provided"));
+  std::puts("geoclue scenarios passed");
+}
+'''
+
+
+class GeoClueTests(unittest.TestCase):
+    def test_a_geoclue_location_becomes_a_position_only_when_it_is_a_real_coordinate(self):
+        compiler = shutil.which('clang++') or shutil.which('c++')
+        if compiler is None:
+            self.skipTest('C++ compiler is unavailable')
+        with tempfile.TemporaryDirectory(prefix='ardia-geoclue-') as scratch:
+            scratch = pathlib.Path(scratch)
+            (scratch / 'geoclue.cc').write_text(SCENARIOS)
+            binary = scratch / 'geoclue'
+            compiled = subprocess.run([compiler, '-std=c++20', '-Wall', '-Wextra', '-Werror', '-fsanitize=address,undefined', '-I', str(SOURCE),
+                                       str(scratch / 'geoclue.cc'), '-o', str(binary)], capture_output=True, text=True, timeout=120)
+            self.assertEqual(compiled.returncode, 0, compiled.stderr)
+            result = subprocess.run([str(binary)], capture_output=True, text=True, timeout=30)
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
+    def test_chrome_asks_the_linux_layer_for_its_location_provider_and_the_layer_answers_with_geoclue(self):
+        patch = (PATCHES / 'chromium-linux-geolocation.patch').read_text()
+        self.assertIn('+ChromeContentBrowserClient::OverrideSystemLocationProvider() {', patch)
+        self.assertIn('+std::unique_ptr<device::LocationProvider> (*g_ardia_linux_location_provider)() = nullptr;', patch)
+        self.assertIn('chromium chromium-linux-geolocation.patch linux', (PATCHES / 'series').read_text())
+        provider = (LINUX / 'ac_linux_geoclue.cc').read_text()
+        for needle in ['g_ardia_linux_location_provider = &CreateLinuxLocationProvider;', '"GetClient"', '"LocationUpdated"', '"Start"',
+                       'geoclue::FixFrom(values)', 'content::GetUIThreadTaskRunner({})', 'kPositionUnavailable']:
+            self.assertIn(needle, provider)
+        host = (LINUX / 'ac_linux_host.cc').read_text()
+        self.assertIn('ardia::InstallLinuxLocationProvider();', host)
+        self.assertIn('.Append("ArdiaLocation.locationPermission")', host)
+
+
+if __name__ == '__main__':
+    unittest.main()
