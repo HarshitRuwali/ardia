@@ -47,7 +47,8 @@ device::mojom::GeopositionResultPtr ResultOf(const std::optional<Fix>& fix) {
   if (fix->altitude) position->altitude = *fix->altitude;
   if (fix->heading) position->heading = *fix->heading;
   if (fix->speed) position->speed = *fix->speed;
-  position->timestamp = base::Time::Now();
+  position->timestamp = fix->acquired_seconds > 0 ? base::Time::FromSecondsSinceUnixEpoch(fix->acquired_seconds)
+                                                 : base::Time::Now();
   return device::mojom::GeopositionResult::NewPosition(std::move(position));
 }
 
@@ -240,6 +241,7 @@ class GeoClue {
     }
     std::optional<Fix> fix = geoclue::FixFrom(values);
     if (!fix) return;
+    fix->acquired_seconds = base::Time::Now().InSecondsFSinceUnixEpoch();
     latest_ = fix;
     first_fix_timer_.Stop();
     for (const scoped_refptr<Relay>& relay : relays_) relay->Send(latest_);

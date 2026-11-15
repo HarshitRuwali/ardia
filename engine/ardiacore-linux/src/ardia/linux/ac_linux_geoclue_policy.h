@@ -31,6 +31,7 @@ struct Fix {
   std::optional<double> altitude;
   std::optional<double> heading;
   std::optional<double> speed;
+  double acquired_seconds = 0;
 };
 
 inline bool Usable(double value) {

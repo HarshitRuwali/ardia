@@ -30,6 +30,7 @@ int main() {
   assert(!FixFrom({{"Latitude", -1.79769e308}, {"Longitude", 0}}));
   auto no_altitude = FixFrom({{"Latitude", 0}, {"Longitude", 0}, {"Altitude", -1.79769e308}});
   assert(no_altitude && !no_altitude->altitude);
+  assert(fix->acquired_seconds == 0);
   assert(AccuracyLevel(true) == 8 && AccuracyLevel(false) == 4);
   assert(RetuneFor(false, false, true, false, false) == Retune::kNothing);
   assert(RetuneFor(true, false, false, true, true) == Retune::kNothing);
@@ -88,6 +89,16 @@ class GeoClueTests(unittest.TestCase):
         self.assertIn('restart_when_started_ = true;', retune)
         self.assertIn('if (std::exchange(restart_when_started_, false)) return Restart();', provider)
         self.assertIn('if (state_ != State::kStarting || !client_.IsValid()) return;', provider, 'a Start answered after Stop leaves the client stopped')
+
+    def test_a_cached_fix_keeps_the_time_geoclue_reported_it_instead_of_each_delivery_time(self):
+        provider = (LINUX / 'ac_linux_geoclue.cc').read_text()
+        result = provider[provider.index('device::mojom::GeopositionResultPtr ResultOf('):provider.index('class Relay')]
+        self.assertIn('base::Time::FromSecondsSinceUnixEpoch(fix->acquired_seconds)', result)
+        self.assertNotIn('position->timestamp = base::Time::Now();', result)
+        read = provider[provider.index('void FixRead('):provider.index('void NoFirstFix()')]
+        self.assertLess(read.index('fix->acquired_seconds = base::Time::Now().InSecondsFSinceUnixEpoch();'), read.index('latest_ = fix;'))
+        watch = provider[provider.index('void Watch('):provider.index('void Unwatch(')]
+        self.assertIn('relay->Send(latest_)', watch, 'a new watcher still gets the cached fix at once, with its own time')
 
 
 if __name__ == '__main__':
