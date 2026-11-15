@@ -1,6 +1,7 @@
 import type { ArdiaHost } from "./host";
 import { linuxUpdater, scheduleUpdateChecks, updatesAvailable, linuxSwitchesFetch, killSwitchesAvailable, type LinuxUpdater } from "./hostUpdates.ts";
 import { isLinuxUtility } from "./session.ts";
+import { refreshDocument } from "./shims/shellBase";
 import { systemInfo } from "../../browser/src/platform/app";
 import { confirm } from "../../browser/src/platform/dialogs";
 import { readDocument, saveDocument } from "../../browser/src/platform/documents";
@@ -29,6 +30,7 @@ export function linuxUpdaterFor(host: ArdiaHost): LinuxUpdater {
     },
     read: readDocument,
     write: saveDocument,
+    refresh: refreshDocument,
     ask: (release, current) =>
       confirm({
         title: `Ardia ${release.version} is available`,

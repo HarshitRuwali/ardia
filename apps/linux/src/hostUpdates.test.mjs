@@ -33,7 +33,7 @@ test("only published releases with a Linux package and a GitHub release page cou
   assert.throws(() => linuxReleases("{}"), /not a list/);
 });
 
-function harness({ version = "0.2.45", body = JSON.stringify(LIST), status = 200, launch = {}, capabilities = ["ArdiaUpdates.releases"] } = {}) {
+function harness({ version = "0.2.45", body = JSON.stringify(LIST), status = 200, launch = {}, capabilities = ["ArdiaUpdates.releases"], disk } = {}) {
   const docs = new Map();
   const seen = { asked: [], told: [], offered: [], opened: [], requests: 0 };
   const host = {
@@ -48,7 +48,13 @@ function harness({ version = "0.2.45", body = JSON.stringify(LIST), status = 200
     host,
     appVersion: () => version,
     read: (name) => docs.get(name) ?? null,
-    write: (name, contents) => docs.set(name, contents),
+    write: (name, contents) => {
+      docs.set(name, contents);
+      disk?.set(name, contents);
+    },
+    refresh: async (name) => {
+      if (disk?.has(name)) docs.set(name, disk.get(name));
+    },
     ask: async (r, current) => (seen.asked.push([r.version, current]), true),
     tell: async (title) => void seen.told.push(title),
     offer: (r) => void seen.offered.push(r.version),
@@ -108,19 +114,38 @@ test("a dev build without a release version isn't set up to update and never ask
   assert.equal((await updater.methods.updaterState()).configured, false);
   await updater.methods.checkForUpdates();
   assert.equal(seen.requests, 0);
-  assert.equal(updater.checksByItself(), false);
+  assert.equal(await updater.checksByItself(), false);
 });
 
 test("automatic checks stay off in hidden instances and when turned off, and run in one window only", async () => {
-  assert.equal(harness({ launch: { background: true } }).updater.checksByItself(), false);
+  assert.equal(await harness({ launch: { background: true } }).updater.checksByItself(), false);
   const { updater } = harness();
-  assert.equal(updater.checksByItself(), true);
+  assert.equal(await updater.checksByItself(), true);
   await updater.methods.setAutomaticUpdateChecks(false);
-  assert.equal(updater.checksByItself(), false);
+  assert.equal(await updater.checksByItself(), false);
   const requested = [];
   const timers = { setTimeout: (fn, ms) => requested.push(["timeout", ms]), setInterval: (fn, ms) => requested.push(["interval", ms]) };
   scheduleUpdateChecks(updater, { locks: { request: (name, callback) => (requested.push(["lock", name]), callback(), new Promise(() => {})) }, timers });
   assert.deepEqual(requested, [["lock", UPDATE_CHECK_LOCK], ["timeout", FIRST_CHECK_AFTER_MS], ["interval", CHECK_EVERY_MS]]);
+});
+
+test("turning automatic checks off or switching channel in the Settings window reaches the window that checks, and its next check keeps both", async () => {
+  const disk = new Map();
+  const browser = harness({ disk });
+  const settings = harness({ disk });
+  assert.equal(await browser.updater.checksByItself(), true);
+  await settings.updater.methods.setAutomaticUpdateChecks(false);
+  assert.equal(await browser.updater.checksByItself(), false);
+  await browser.updater.check(false);
+  assert.equal(browser.seen.requests, 0, "a scheduled check reads the switch again before it asks GitHub");
+  await settings.updater.methods.setUpdateChannel("nightly");
+  assert.equal((await browser.updater.methods.updaterState()).channel, "nightly");
+  await browser.updater.methods.checkForUpdates();
+  assert.deepEqual(browser.seen.asked.at(-1), ["0.2.47-nightly.3", "0.2.45"]);
+  const saved = JSON.parse(disk.get(UPDATE_PREFERENCES));
+  assert.equal(saved.automaticChecks, false, "recording the check doesn't write the old switch back");
+  assert.equal(saved.channel, "nightly");
+  assert.equal(saved.lastCheck, 1_000);
 });
 
 test("the kill-switch file comes through the native host and every other fetch is left alone", async () => {

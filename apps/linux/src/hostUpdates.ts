@@ -22,7 +22,8 @@ export type UpdateDeps = {
   host: ArdiaHost;
   appVersion: () => string | null;
   read: (name: string) => string | null;
-  write: (name: string, contents: string) => void;
+  write: (name: string, contents: string) => unknown;
+  refresh?: (name: string) => Promise<unknown>;
   ask: (release: Release, current: string) => Promise<boolean>;
   tell: (title: string, message: string) => Promise<void>;
   offer: (release: Release) => void;
@@ -51,13 +52,18 @@ export function linuxUpdater(deps: UpdateDeps) {
   const now = deps.now ?? Date.now;
   let checking = false;
   let switchCheck: SwitchCheck | null = null;
-  const preferences = () => readPreferences(deps.read);
-  const remember = (patch: Partial<Preferences>) => deps.write(UPDATE_PREFERENCES, JSON.stringify({ ...preferences(), ...patch }));
+  const preferences = async () => {
+    await deps.refresh?.(UPDATE_PREFERENCES).catch(() => {});
+    return readPreferences(deps.read);
+  };
+  const remember = async (patch: Partial<Preferences>) => {
+    await deps.write(UPDATE_PREFERENCES, JSON.stringify({ ...(await preferences()), ...patch }));
+  };
   const version = () => {
     const current = deps.appVersion();
     return isAppVersion(current) ? current : null;
   };
-  const channel = (current: string | null): UpdateChannel => preferences().channel ?? (current ? channelOf(current) : "stable");
+  const channel = (saved: Preferences, current: string | null): UpdateChannel => saved.channel ?? (current ? channelOf(current) : "stable");
 
   async function newest(wanted: UpdateChannel): Promise<Release | null> {
     const fetched = await invokeHost<Fetched>(RELEASES_METHOD, { args: [] }, deps.host);
@@ -68,12 +74,15 @@ export function linuxUpdater(deps: UpdateDeps) {
   async function check(asked: boolean): Promise<void> {
     const current = version();
     if (checking || !current) return;
-    const wanted = channel(current);
     checking = true;
-    switchCheck = { phase: "checking", channel: wanted };
+    let wanted: UpdateChannel = channelOf(current);
     try {
+      const saved = await preferences();
+      if (!asked && !saved.automaticChecks) return;
+      wanted = channel(saved, current);
+      switchCheck = { phase: "checking", channel: wanted };
       const release = await newest(wanted);
-      remember({ lastCheck: now() });
+      await remember({ lastCheck: now() });
       const newer = !!release && compareVersions(release.version, current) > 0;
       noteUpdateCheck(asked, newer ? "found" : "upToDate");
       switchCheck = newer ? { phase: "found", channel: wanted, version: release!.version } : { phase: "upToDate", channel: wanted };
@@ -88,8 +97,8 @@ export function linuxUpdater(deps: UpdateDeps) {
         }
         return;
       }
-      if (preferences().notified === release!.version) return;
-      remember({ notified: release!.version });
+      if ((await preferences()).notified === release!.version) return;
+      await remember({ notified: release!.version });
       deps.offer(release!);
     } catch (error) {
       noteUpdateCheck(asked, "failed");
@@ -104,7 +113,7 @@ export function linuxUpdater(deps: UpdateDeps) {
   const methods = {
     updaterState: async (): Promise<UpdaterState> => {
       const current = version();
-      const saved = preferences();
+      const saved = await preferences();
       return {
         available: true,
         configured: !!current,
@@ -115,7 +124,7 @@ export function linuxUpdater(deps: UpdateDeps) {
         feedURL: RELEASES_PAGE,
         lastCheck: saved.lastCheck,
         version: current ?? deps.appVersion() ?? "",
-        channel: channel(current),
+        channel: channel(saved, current),
         buildChannel: current ? channelOf(current) : "stable",
         switchCheck,
       };
@@ -124,14 +133,14 @@ export function linuxUpdater(deps: UpdateDeps) {
     setAutomaticUpdateChecks: async (on: unknown) => remember({ automaticChecks: on === true }),
     setAutomaticUpdateDownloads: async () => {},
     setUpdateChannel: async (next: unknown) => {
-      remember({ channel: next === "nightly" ? "nightly" : "stable", notified: null });
+      await remember({ channel: next === "nightly" ? "nightly" : "stable", notified: null });
       await check(true);
     },
   };
 
-  const checksByItself = () => {
+  const checksByItself = async () => {
     const launch = hostLaunchConfig(deps.host);
-    return !!version() && preferences().automaticChecks && !launch.background && !launch.isolated;
+    return !!version() && !launch.background && !launch.isolated && (await preferences()).automaticChecks;
   };
 
   return { methods, check, checksByItself };
@@ -141,7 +150,9 @@ export type LinuxUpdater = ReturnType<typeof linuxUpdater>;
 
 export function scheduleUpdateChecks(updater: LinuxUpdater, options: { locks?: { request(name: string, callback: () => Promise<void>): Promise<unknown> }; timers?: { setTimeout: typeof setTimeout; setInterval: typeof setInterval } }) {
   const timers = options.timers ?? globalThis;
-  const run = () => void (updater.checksByItself() && updater.check(false));
+  const run = () => void updater.checksByItself().then((checks) => {
+    if (checks) return updater.check(false);
+  });
   const lead = () => new Promise<void>(() => {
     timers.setTimeout(run, FIRST_CHECK_AFTER_MS);
     timers.setInterval(run, CHECK_EVERY_MS);
