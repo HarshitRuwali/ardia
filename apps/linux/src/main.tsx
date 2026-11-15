@@ -60,6 +60,7 @@ import { inputRegions, startShellAbove } from "./shellAbove";
 import { InWindowPlayer } from "./InWindowPlayer";
 import { startLinuxUpdates } from "./linuxUpdates";
 import { noticeUnsandboxedLaunch } from "./sandboxNotice";
+import { countLoginPasswordChecks } from "./reauthCounts";
 import { startPipPlayer } from "./pipPlayer";
 import { startLinuxShortcuts } from "./shortcutsRuntime";
 import { linuxWindowMenu, TrafficLights } from "./TrafficLights";
@@ -107,6 +108,7 @@ async function start() {
   useBrowser.getState().hydrate(initialLinuxSession(ardiaHost, saved?.settings && restoreSession !== undefined ? { ...saved, settings: { ...saved.settings, restoreSession } } : saved));
   startConfigFiles(colorRoles, launch);
   startHostTelemetry({ host: ardiaHost, candidate: !utility, locks: navigator.locks as unknown as LeaderLocks });
+  countLoginPasswordChecks(linuxTelemetryHooks.leading);
   const capabilities = linuxCapabilities(ardiaHost);
   if (capabilities.cliControl) startCliControl();
   await startLinuxShortcuts(ardiaHost);

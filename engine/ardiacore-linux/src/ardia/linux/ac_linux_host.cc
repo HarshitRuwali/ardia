@@ -102,6 +102,7 @@
 #include "ardia/linux/ac_linux_telemetry.h"
 #include "ardia/linux/ac_linux_telemetry_policy.h"
 #include "ardia/linux/ac_linux_updates.h"
+#include "ardia/linux/ac_linux_password_prompt.h"
 #include "ardia/linux/ac_linux_typeahead_input.h"
 #include "ardia/linux/host_bootstrap.h"
 #include "base/auto_reset.h"
@@ -7957,6 +7958,7 @@ void StartLinuxHost() {
   ardiacore::InstallLinuxBackgroundFileDialogs();
   g_ardia_auto_picture_in_picture_off = true;
   ardia::InstallCliVisibleTabs();
+  ardia::linux_password::InstallReauthFallback();
   g_ardia_linux_tab_shown = [](content::WebContents* contents) {
     for (const auto& [id, host] : Hosts()) {
       const int shown = host->TabShown(contents);

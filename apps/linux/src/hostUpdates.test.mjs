@@ -165,3 +165,17 @@ test("a launch the launcher ran without the sandbox says why once, in the window
   assert.deepEqual(shown.map(([windowId, title]) => [windowId, title]), [["w1", "Ardia is running without Chromium's sandbox"]]);
   assert.equal(takeUpdateCounts().launches_without_sandbox, 1);
 });
+
+test("only the telemetry leader counts login-password confirmations, by outcome, and polkit's are left out", async () => {
+  const { countLoginPasswordChecks } = await import("./reauthCounts.ts");
+  takeUpdateCounts();
+  let emit;
+  let leading = false;
+  countLoginPasswordChecks(() => leading, (listener) => (emit = listener));
+  emit({ method: "loginPassword", result: "granted" });
+  leading = true;
+  for (const result of ["granted", "denied", "denied", "cancelled", "unavailable"]) emit({ method: "loginPassword", result });
+  emit({ method: "polkit", result: "granted" });
+  const counts = takeUpdateCounts();
+  assert.deepEqual([counts.login_password_checks_granted, counts.login_password_checks_denied, counts.login_password_checks_cancelled], [1, 2, 1]);
+});
