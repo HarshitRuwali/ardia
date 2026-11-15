@@ -5,7 +5,8 @@ usage='usage: scripts/linux/arch/update-pkgbuild.sh <version> (--sha256 HEX | --
 
 Points the ardia-bin PKGBUILD at the release tarball of Ardia <version>
 (Ardia-<version>-linux-x64.tar.xz on the v<version> GitHub release): it sets
-pkgver (a nightly'"'"'s - becomes _), resets pkgrel to 1, pins sha256sums to HEX
+pkgver (a nightly'"'"'s -nightly.<n> becomes nightly.<n>, which pacman
+sorts before its stable), resets pkgrel to 1, pins sha256sums to HEX
 or to the digest of TARBALL, and writes the matching .SRCINFO, as
 makepkg --printsrcinfo would, without needing makepkg.
 
@@ -76,11 +77,11 @@ out=${out:-$here}
 mkdir -p "$out"
 pkgbuild=$(mktemp)
 trap 'rm -f "$pkgbuild"' EXIT
-sed -e "s/^pkgver=.*/pkgver=${version//-/_}/" -e 's/^pkgrel=.*/pkgrel=1/' \
+sed -e "s/^pkgver=.*/pkgver=${version/-nightly/nightly}/" -e 's/^pkgrel=.*/pkgrel=1/' \
   -e "s/^sha256sums=.*/sha256sums=('$sha256')/" "$here/PKGBUILD" > "$pkgbuild"
-grep -qx "pkgver=${version//-/_}" "$pkgbuild" && grep -qx "sha256sums=('$sha256')" "$pkgbuild" \
+grep -qx "pkgver=${version/-nightly/nightly}" "$pkgbuild" && grep -qx "sha256sums=('$sha256')" "$pkgbuild" \
   || die "the PKGBUILD lost its one-line pkgver= or sha256sums= assignment"
 srcinfo "$pkgbuild" > "$out/.SRCINFO"
 cp "$pkgbuild" "$out/PKGBUILD"
 chmod 0644 "$out/PKGBUILD" "$out/.SRCINFO"
-echo "$out/PKGBUILD: ardia-bin ${version//-/_}-1, sha256 $sha256"
+echo "$out/PKGBUILD: ardia-bin ${version/-nightly/nightly}-1, sha256 $sha256"

@@ -158,21 +158,16 @@ class PackageVersionAndCliTests(unittest.TestCase):
 
 
 class ArchPackageTests(unittest.TestCase):
-    def pkgver(self, srcdir):
-        script = f'source {str(LINUX / "arch/PKGBUILD")!r}; srcdir={str(srcdir)!r}; pkgver'
-        result = subprocess.run(['bash', '-c', script], capture_output=True, text=True, timeout=30)
+    def source(self, pkgver):
+        result = subprocess.run(['bash', '-c', 'source "$1" && pkgver=$2 && source <(grep "^source=" "$1") && printf "%s" "${source[0]}"',
+                                 'bash', str(LINUX / 'arch/PKGBUILD'), pkgver], capture_output=True, text=True, timeout=30)
         self.assertEqual(result.returncode, 0, result.stderr)
-        return result.stdout.strip()
+        return result.stdout
 
-    def test_pkgver_comes_from_the_package_version(self):
-        with tempfile.TemporaryDirectory() as scratch:
-            srcdir = pathlib.Path(scratch)
-            self.assertEqual(self.pkgver(srcdir), '0.0.0')
-            (srcdir / 'ardia/lib/ardia').mkdir(parents=True)
-            (srcdir / 'ardia/lib/ardia/VERSION').write_text(VERSION + '\n')
-            self.assertEqual(self.pkgver(srcdir), '0.2.44_nightly.3')
-            (srcdir / 'ardia/lib/ardia/VERSION').write_text('0.2.45\n')
-            self.assertEqual(self.pkgver(srcdir), '0.2.45')
+    def test_source_is_the_release_tarball_of_the_package_version(self):
+        release = 'https://github.com/ardia-browser/ardia/releases/download'
+        self.assertEqual(self.source('0.2.44nightly.3'), f'ardia-bin-0.2.44nightly.3.tar.xz::{release}/v{VERSION}/Ardia-{VERSION}-linux-x64.tar.xz')
+        self.assertEqual(self.source('0.2.45'), f'ardia-bin-0.2.45.tar.xz::{release}/v0.2.45/Ardia-0.2.45-linux-x64.tar.xz')
 
 
 class ReleaseScriptTests(unittest.TestCase):

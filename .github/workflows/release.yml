@@ -426,6 +426,7 @@ jobs:
 
   aur:
     needs: [preflight, linux, publish]
+    continue-on-error: true
     if: ${{ !cancelled() && needs.linux.result == 'success' && needs.publish.result == 'success' && !contains(inputs.version, '-') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 15

@@ -61,6 +61,9 @@ SONAME_PACKAGES = {
     'libXrandr.so.2': 'libxrandr2',
 }
 LOADED_AT_RUNTIME = ['libgtk-3-0t64 | libgtk-3-0', 'polkitd | policykit-1', 'fonts-liberation', 'xdg-utils']
+CLI_INSTALLER = ['curl']
+BROWSER_ALTERNATIVES = ('x-www-browser', 'gnome-www-browser')
+ALTERNATIVE_PRIORITY = 100
 RECOMMENDS = ['libsecret-1-0']
 
 POSTINST = f'''#!/bin/sh
@@ -72,6 +75,14 @@ if [ "$1" = configure ] && [ -e /etc/apparmor.d/abi/4.0 ]; then
       || echo "ardia: could not load /etc/apparmor.d/ardia; it loads at the next boot" >&2
   fi
 fi
+if [ "$1" = configure ]; then
+''' + ''.join(f'  update-alternatives --install /usr/bin/{name} {name} /{PREFIX}/bin/ardia {ALTERNATIVE_PRIORITY}\n' for name in BROWSER_ALTERNATIVES) + '''fi
+'''
+
+PRERM = '''#!/bin/sh
+set -e
+if [ "$1" = remove ] || [ "$1" = deconfigure ]; then
+''' + ''.join(f'  update-alternatives --remove {name} /{PREFIX}/bin/ardia\n' for name in BROWSER_ALTERNATIVES) + '''fi
 '''
 
 POSTRM = '''#!/bin/sh
@@ -149,7 +160,7 @@ def depends(runtime):
     for name in sorted(sonames - bundled - GLIBC_SONAMES):
         if SONAME_PACKAGES[name] not in packages:
             packages.append(SONAME_PACKAGES[name])
-    return packages + [package for package in LOADED_AT_RUNTIME if package not in packages]
+    return packages + [package for package in LOADED_AT_RUNTIME + CLI_INSTALLER if package not in packages]
 
 
 def extract(tarball, destination):
@@ -293,6 +304,7 @@ def build(tarball, destination, version=None, maintainer=MAINTAINER):
         write(control / 'control', ''.join(f'{name}: {value}\n' for name, value in fields))
         write(control / 'md5sums', md5sums(stage))
         write(control / 'postinst', POSTINST, 0o755)
+        write(control / 'prerm', PRERM, 0o755)
         write(control / 'postrm', POSTRM, 0o755)
         destination.parent.mkdir(parents=True, exist_ok=True)
         partial = destination.with_name('.' + destination.name + '.partial')
