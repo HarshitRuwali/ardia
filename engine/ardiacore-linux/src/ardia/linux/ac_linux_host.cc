@@ -103,6 +103,7 @@
 #include "ardia/linux/ac_linux_telemetry_policy.h"
 #include "ardia/linux/ac_linux_updates.h"
 #include "ardia/linux/ac_linux_password_prompt.h"
+#include "ardia/linux/ac_linux_system_signals.h"
 #include "ardia/linux/ac_linux_typeahead_input.h"
 #include "ardia/linux/host_bootstrap.h"
 #include "base/auto_reset.h"
@@ -1368,6 +1369,7 @@ class ShellHostView : public views::View,
     LinuxExtensionsWindowClosing(id_);
   }
   void WatchSystemState();
+  void WatchSystemSignals();
   void WatchCalendar();
   void NoteInputActivity();
   void OfferTab(content::WebContents* contents) {
@@ -1779,6 +1781,7 @@ class ShellHostView : public views::View,
   base::ScopedObservation<views::FocusManager, views::FocusChangeListener> pane_focus_observation_{this};
   std::map<int, bool> devtools_had_focus_;
   base::CallbackListSubscription system_state_subscription_;
+  base::CallbackListSubscription system_signals_subscription_;
   base::CallbackListSubscription calendar_subscription_;
   base::WeakPtrFactory<ShellHostView> weak_factory_{this};
 };
@@ -2329,6 +2332,7 @@ class HostMessageHandler : public content::WebUIMessageHandler,
       }
       if (name == "engine.systemState") {
         host_->WatchSystemState();
+        host_->WatchSystemSignals();
         return ardiacore::LinuxPowerMonitor::Get().Current(base::BindOnce(
             [](base::WeakPtr<HostMessageHandler> handler, std::string id, base::DictValue state) {
               if (handler) handler->Resolve(id, base::Value(std::move(state)));
@@ -2560,6 +2564,7 @@ void CloseUtilitiesWithoutBrowserWindows() {
 }
 
 ShellHostView::~ShellHostView() {
+  ardia::LinuxSystemSignals::Get().WatchIdle(id_, {});
   ReleaseDragEscape();
   ForgetOpenerHost(id_);
   LinuxImportWindowClosed(window_id_);
@@ -3130,6 +3135,8 @@ base::DictValue ShellHostView::Bootstrap() const {
       .Append("ArdiaSearch.suggest").Append("ArdiaSearch.cancelSuggest")
       .Append("ArdiaTelemetry.post")
       .Append("ArdiaShell.fetchKillSwitches")
+      .Append("ArdiaSystemSignals.watchIdle")
+      .Append("ArdiaSystemSignals.devPost")
       .Append("ArdiaUpdates.releases")
       .Append("ArdiaShell.launchSteps")
       .Append("ArdiaShell.completeLaunchStep")
@@ -4679,6 +4686,14 @@ void ShellHostView::NoteInputActivity() {
   if (is_utility() || !handler_) return;
   Event("ArdiaEngine", "engine", base::Value(base::DictValue()
       .Set("name", "engine.inputActivity").Set("data", base::DictValue())));
+}
+
+void ShellHostView::WatchSystemSignals() {
+  if (system_signals_subscription_) return;
+  system_signals_subscription_ = ardia::LinuxSystemSignals::Get().Subscribe(base::BindRepeating(
+      [](base::WeakPtr<ShellHostView> host, const base::DictValue& signal) {
+        if (host) host->Event("ArdiaSystemSignals", "onSystemSignal", base::Value(signal.Clone()));
+      }, GetWeakPtr()));
 }
 
 void ShellHostView::WatchSystemState() {
@@ -6544,6 +6559,22 @@ void ShellHostView::Invoke(
           std::move(done).Run(true, base::Value(base::DictValue().Set("status", status).Set("body", std::move(body))));
         },
         std::move(done)));
+  }
+  if (method == "ArdiaSystemSignals.watchIdle") {
+    if (values.size() != 1 || !values[0].is_list())
+      return std::move(done).Run(false, base::Value("watchIdle takes a list of seconds"));
+    std::vector<double> thresholds;
+    for (const base::Value& threshold : values[0].GetList())
+      if (threshold.is_int() || threshold.is_double()) thresholds.push_back(threshold.GetDouble());
+    WatchSystemSignals();
+    ardia::LinuxSystemSignals::Get().WatchIdle(id_, thresholds);
+    return std::move(done).Run(true, base::Value());
+  }
+  if (method == "ArdiaSystemSignals.devPost") {
+    if (values.size() != 1 || !values[0].is_string())
+      return std::move(done).Run(false, base::Value("devPost takes willSleep or didWake"));
+    WatchSystemSignals();
+    return std::move(done).Run(true, base::Value(ardia::LinuxSystemSignals::Get().Post(values[0].GetString())));
   }
   if (method == "ArdiaTelemetry.post") {
     if (values.size() != 2 || !values[0].is_string() || !values[1].is_string() ||

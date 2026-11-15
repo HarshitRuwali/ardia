@@ -1,0 +1,87 @@
+import pathlib
+import shutil
+import subprocess
+import tempfile
+import unittest
+
+
+ROOT = pathlib.Path(__file__).resolve().parents[1]
+SOURCE = ROOT / 'src'
+LINUX = SOURCE / 'ardia' / 'linux'
+
+SCENARIOS = r'''#include <cassert>
+#include <cstdio>
+#include "ardia/linux/ac_linux_idle_policy.h"
+using namespace ardia::linux_idle;
+
+int main() {
+  assert((CleanThresholds({60, 0, -5, 1e9, 30, 60, 0.5}) == std::set<double>{30, 60}));
+  std::vector<double> many;
+  for (int i = 1; i <= 40; ++i) many.push_back(i * 10);
+  assert(CleanThresholds(many).size() == kMaxThresholds);
+
+  IdleWatch watch;
+  assert(watch.empty());
+  watch.Watch({60, 300});
+  assert(watch.Update(10).empty());
+  assert(watch.NextCheckSeconds(10) == 50);
+  auto first = watch.Update(61);
+  assert(first.size() == 1 && first[0].first == 60 && first[0].second);
+  assert(watch.NextCheckSeconds(61) == kActivePollSeconds);
+  assert(watch.Update(70).empty());
+  auto both = watch.Update(301);
+  assert(both.size() == 1 && both[0].first == 300 && both[0].second);
+  auto back = watch.Update(0.2);
+  assert(back.size() == 2 && !back[0].second && !back[1].second);
+  watch.Watch({300});
+  assert(watch.Update(400).size() == 1);
+  watch.Watch({300, 900});
+  auto kept = watch.Update(400);
+  assert(kept.empty());
+  assert(watch.NextCheckSeconds(400) == kActivePollSeconds);
+  watch.Watch({});
+  assert(watch.empty());
+  IdleWatch far;
+  far.Watch({3600});
+  assert(far.NextCheckSeconds(0) == kLongestWaitSeconds);
+  IdleWatch near;
+  near.Watch({5});
+  assert(near.NextCheckSeconds(4.9) == 0.25);
+  std::puts("idle scenarios passed");
+}
+'''
+
+
+class SystemSignalsTests(unittest.TestCase):
+    def test_idle_thresholds_flip_once_each_way_and_the_watch_polls_no_more_than_it_must(self):
+        compiler = shutil.which('clang++') or shutil.which('c++')
+        if compiler is None:
+            self.skipTest('C++ compiler is unavailable')
+        with tempfile.TemporaryDirectory(prefix='ardia-idle-') as scratch:
+            scratch = pathlib.Path(scratch)
+            (scratch / 'idle.cc').write_text(SCENARIOS)
+            binary = scratch / 'idle'
+            compiled = subprocess.run([compiler, '-std=c++20', '-Wall', '-Wextra', '-Werror', '-fsanitize=address,undefined', '-I', str(SOURCE),
+                                       str(scratch / 'idle.cc'), '-o', str(binary)], capture_output=True, text=True, timeout=120)
+            self.assertEqual(compiled.returncode, 0, compiled.stderr)
+            result = subprocess.run([str(binary)], capture_output=True, text=True, timeout=30)
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
+    def test_sleep_and_wake_come_from_logind_and_idle_from_the_platform_idle_time(self):
+        signals = (LINUX / 'ac_linux_system_signals.cc').read_text()
+        for needle in ['"org.freedesktop.login1"', '"PrepareForSleep"', 'ConnectToSignal(kLogindManager', 'ui::CalculateIdleTime()',
+                       'idle_.NextCheckSeconds(idle_seconds)', '.Set("type", starting ? "sleep" : "wake")', '"willSleep"', '"didWake"']:
+            self.assertIn(needle, signals)
+        host = (LINUX / 'ac_linux_host.cc').read_text()
+        bootstrap = host[host.index('base::DictValue ShellHostView::Bootstrap() const {'):host.index('void ShellHostView::LayoutOverlay()')]
+        for capability in ['ArdiaSystemSignals.watchIdle', 'ArdiaSystemSignals.devPost']:
+            self.assertIn(f'.Append("{capability}")', bootstrap)
+        self.assertIn('host->Event("ArdiaSystemSignals", "onSystemSignal"', host)
+        self.assertIn('ardia::LinuxSystemSignals::Get().WatchIdle(id_, {});', host)
+        build = (LINUX / 'BUILD.gn').read_text()
+        for name in ['"ac_linux_system_signals.cc"', '"ac_linux_idle_policy.h"']:
+            self.assertIn(name, build)
+
+
+if __name__ == '__main__':
+    unittest.main()
