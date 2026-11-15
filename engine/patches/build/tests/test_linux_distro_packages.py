@@ -59,6 +59,7 @@ class DebDependsTests(unittest.TestCase):
         self.assertEqual(packages.count('libglib2.0-0t64 | libglib2.0-0'), 1)
         self.assertIn('libgtk-3-0t64 | libgtk-3-0', packages)
         self.assertIn('polkitd | policykit-1', packages)
+        self.assertIn('curl', packages)
         self.assertFalse([package for package in packages if 'qt' in package.lower()])
 
     def test_an_unknown_soname_fails_the_build(self):
@@ -79,11 +80,11 @@ class PkgbuildTests(unittest.TestCase):
             self.assertEqual(result.returncode, 0, result.stderr)
             pkgbuild = (pathlib.Path(scratch) / 'PKGBUILD').read_text()
             srcinfo = (pathlib.Path(scratch) / '.SRCINFO').read_text()
-        self.assertIn('pkgver=0.2.48_nightly.1\n', pkgbuild)
+        self.assertIn('pkgver=0.2.48nightly.1\n', pkgbuild)
         self.assertIn('pkgrel=1\n', pkgbuild)
         self.assertIn(f"sha256sums=('{DIGEST}')\n", pkgbuild)
-        self.assertIn('\tpkgver = 0.2.48_nightly.1\n', srcinfo)
-        self.assertIn('\tsource = ardia-bin-0.2.48_nightly.1.tar.xz::https://github.com/ardia-browser/ardia/releases/download/'
+        self.assertIn('\tpkgver = 0.2.48nightly.1\n', srcinfo)
+        self.assertIn('\tsource = ardia-bin-0.2.48nightly.1.tar.xz::https://github.com/ardia-browser/ardia/releases/download/'
                       'v0.2.48-nightly.1/Ardia-0.2.48-nightly.1-linux-x64.tar.xz\n', srcinfo)
         self.assertIn(f'\tsha256sums = {DIGEST}\n', srcinfo)
         self.assertNotIn('SKIP', pkgbuild + srcinfo)
@@ -94,6 +95,27 @@ class PkgbuildTests(unittest.TestCase):
             run(ARCH / 'update-pkgbuild.sh', '0.2.48', '--sha256', DIGEST, '--out', scratch)
             printed = subprocess.run(['makepkg', '--printsrcinfo'], cwd=scratch, capture_output=True, text=True)
             self.assertEqual(printed.stdout, (pathlib.Path(scratch) / '.SRCINFO').read_text())
+
+    @unittest.skipUnless(shutil.which('vercmp'), 'vercmp')
+    def test_pacman_sorts_a_nightly_before_its_stable(self):
+        def pkgver(version):
+            with tempfile.TemporaryDirectory() as scratch:
+                run(ARCH / 'update-pkgbuild.sh', version, '--sha256', DIGEST, '--out', scratch)
+                return next(line.split('=', 1)[1] for line in (pathlib.Path(scratch) / 'PKGBUILD').read_text().splitlines() if line.startswith('pkgver='))
+        ordered = [pkgver(version) for version in ('0.2.46', '0.2.47-nightly.2', '0.2.47-nightly.10', '0.2.47', '0.2.48-nightly.1')]
+        for older, newer in zip(ordered, ordered[1:]):
+            self.assertEqual(run('vercmp', older, newer).stdout.strip(), '-1', f'{older} < {newer}')
+
+    def test_publish_refuses_to_move_back_and_orders_nightlies_before_stables(self):
+        script = (ARCH / 'publish-aur.sh').read_text()
+        order_key = script[script.index('order_key() {'):script.index('\n}\n', script.index('order_key() {')) + 3]
+        def newest(*versions):
+            keys = ' '.join(f'"$(order_key {version})"' for version in versions)
+            result = subprocess.run(['bash', '-c', f'{order_key}printf "%s\\n" {keys} | sort -V | tail -1'], capture_output=True, text=True)
+            return result.stdout.strip()
+        self.assertEqual(newest('0.2.47nightly.2', '0.2.47'), '0.2.47.1.0')
+        self.assertEqual(newest('0.2.47nightly.10', '0.2.47nightly.2'), '0.2.47.0.10')
+        self.assertEqual(newest('0.2.48nightly.1', '0.2.47'), '0.2.48.0.1')
 
     def test_bad_input_is_refused(self):
         self.assertEqual(run(ARCH / 'update-pkgbuild.sh', '0.2', '--sha256', DIGEST).returncode, 1)

@@ -19,6 +19,12 @@ Environment:
   AUR_OUT           also copy the PKGBUILD and .SRCINFO into this directory'
 
 die() { echo "publish-aur.sh: $*" >&2; exit 1; }
+order_key() {
+  case "$1" in
+    *nightly.*) printf '%s.0.%s\n' "${1%%nightly.*}" "${1##*nightly.}" ;;
+    *) printf '%s.1.0\n' "$1" ;;
+  esac
+}
 
 here=$(cd "$(dirname "$0")" && pwd -P)
 version=""
@@ -34,7 +40,7 @@ while [ $# -gt 0 ]; do
   esac
 done
 [ -n "$version" ] && [ ${#digest_args[@]} -eq 2 ] || { echo "$usage" >&2; exit 64; }
-pkgver=${version//-/_}
+pkgver=${version/-nightly/nightly}
 
 work=$(mktemp -d "${TMPDIR:-/tmp}/ardia-aur.XXXXXX")
 trap 'rm -rf "$work"' EXIT
@@ -53,7 +59,7 @@ git clone -q "$remote" "$work/aur" 2>"$work/clone.log" || { cat "$work/clone.log
 cd "$work/aur"
 if [ -f .SRCINFO ]; then
   current=$(sed -n 's/^\tpkgver = //p' .SRCINFO)
-  if [ -n "$current" ] && [ "$current" != "$pkgver" ] && [ "$(printf '%s\n%s\n' "$current" "$pkgver" | sort -V | tail -1)" != "$pkgver" ]; then
+  if [ -n "$current" ] && [ "$current" != "$pkgver" ] && [ "$(printf '%s\n%s\n' "$(order_key "$current")" "$(order_key "$pkgver")" | sort -V | tail -1)" != "$(order_key "$pkgver")" ]; then
     die "the AUR has ardia-bin $current, newer than $pkgver"
   fi
 fi

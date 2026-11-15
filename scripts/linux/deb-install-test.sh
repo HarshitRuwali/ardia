@@ -4,7 +4,8 @@ usage='usage: scripts/linux/deb-install-test.sh <ardia_<version>_amd64.deb> [<im
 
 Installs the .deb with apt in fresh containers (docker or podman) and checks
 that its dependencies resolve, every library chrome needs is found, chrome
---version runs, the AppArmor profile is written only where AppArmor reads the
+--version runs, ardia is an x-www-browser alternative, curl is there for the
+bundled CLI installer, the AppArmor profile is written only where AppArmor reads the
 4.0 ABI, and apt purge leaves the file system as it was before the install.
 The images default to debian:13 and ubuntu:24.04; ubuntu:24.04 also gets the
 apparmor package first, so its run covers the profile.'
@@ -47,6 +48,10 @@ grep -qx "Exec=/usr/bin/ardia %U" /usr/share/applications/ardia.desktop || fail 
 test -f /usr/share/icons/hicolor/256x256/apps/ardia.png || fail "no icon"
 test -f /usr/share/polkit-1/actions/dev.ardia.linux.policy || fail "no polkit policy"
 echo "ok   desktop entry, icon and polkit policy"
+update-alternatives --query x-www-browser | grep -qx "Alternative: /usr/bin/ardia" || fail "ardia is not an x-www-browser alternative"
+update-alternatives --query gnome-www-browser | grep -qx "Alternative: /usr/bin/ardia" || fail "ardia is not a gnome-www-browser alternative"
+command -v curl >/dev/null || fail "no curl, which the bundled CLI installer needs"
+echo "ok   x-www-browser and gnome-www-browser alternatives, curl"
 if [ -e /etc/apparmor.d/abi/4.0 ]; then
   grep -q "profile ardia /usr/lib/ardia/chrome " /etc/apparmor.d/ardia || fail "no AppArmor profile for /usr/lib/ardia/chrome"
   echo "ok   AppArmor profile installed"

@@ -166,7 +166,7 @@ class ArchPackageTests(unittest.TestCase):
 
     def test_source_is_the_release_tarball_of_the_package_version(self):
         release = 'https://github.com/ardia-browser/ardia/releases/download'
-        self.assertEqual(self.source('0.2.44_nightly.3'), f'ardia-bin-0.2.44_nightly.3.tar.xz::{release}/v{VERSION}/Ardia-{VERSION}-linux-x64.tar.xz')
+        self.assertEqual(self.source('0.2.44nightly.3'), f'ardia-bin-0.2.44nightly.3.tar.xz::{release}/v{VERSION}/Ardia-{VERSION}-linux-x64.tar.xz')
         self.assertEqual(self.source('0.2.45'), f'ardia-bin-0.2.45.tar.xz::{release}/v0.2.45/Ardia-0.2.45-linux-x64.tar.xz')
 
 

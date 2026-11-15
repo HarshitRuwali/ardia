@@ -591,24 +591,28 @@ command ([linux-ci.md](linux-ci.md) › Linux releases).
   - `Depends` comes from the binaries: deb.py reads every `NEEDED` library of the ELF files in `lib/ardia` (the Qt
     shims excepted: Chromium loads them only on Qt desktops), maps each to its Debian package with the 64-bit-time
     name first (`libasound2t64 | libasound2`), takes `libc6`'s minimum from the highest `GLIBC_` symbol version, and
-    adds what Chromium loads at run time (GTK 3, polkit, Liberation fonts, xdg-utils). A library it has no package for
+    adds what Chromium loads at run time (GTK 3, polkit, Liberation fonts, xdg-utils) and `curl`, which the bundled
+    CLI installer downloads with. A library it has no package for
     fails the build, so a new engine dependency can't ship unnoticed: add it to `SONAME_PACKAGES`;
   - shared libraries and data files lose the executable bit, which only `chrome`, the crash handler and scripts keep;
   - `postinst` copies the AppArmor profile to `/etc/apparmor.d/ardia` and loads it where `/etc/apparmor.d/abi/4.0`
-    exists, as `install.sh` does; `postrm` unloads and deletes it (and its cache) on remove and purge.
+    exists, as `install.sh` does; `postrm` unloads and deletes it (and its cache) on remove and purge;
+  - `postinst` registers `/usr/bin/ardia` as an `x-www-browser` and `gnome-www-browser` alternative (priority 100),
+    and `prerm` unregisters it.
 
   `scripts/linux/deb-install-test.sh <deb>` installs it with apt in `debian:13` and `ubuntu:24.04` containers (Ubuntu
-  with the apparmor package): the dependencies resolve, `ldd` finds every library, `ardia --version` runs, the profile
+  with the apparmor package): the dependencies resolve, `ldd` finds every library, `ardia --version` runs, the browser alternatives
+  and `curl` are there, the profile
   appears only with the 4.0 ABI, and `apt purge` leaves the file system as it was before the install. Lintian's
   remaining tags are Chromium's own: libraries built into `chrome` and uBlock Origin's scripts.
 - **Arch.** `scripts/linux/arch/PKGBUILD` is the AUR package `ardia-bin`: it downloads
   `Ardia-<version>-linux-x64.tar.xz` from the `v<version>` release, checks its pinned sha256 and installs it with the
   tarball's `install.sh`. `scripts/linux/arch/update-pkgbuild.sh <version> --package <tarball>` (or `--sha256`) sets
-  `pkgver` (`-` becomes `_`), resets `pkgrel` and writes the matching `.SRCINFO` without makepkg;
+  `pkgver` (`0.2.47-nightly.3` becomes `0.2.47nightly.3`, which pacman sorts before `0.2.47`), resets `pkgrel` and writes the matching `.SRCINFO` without makepkg;
   `update-pkgbuild.sh --check` fails when the committed `.SRCINFO` drifts from the PKGBUILD. The committed pair
   pins the 0.2.47-nightly.2 test build this was verified with; the AUR copy moves with each stable release.
   `scripts/linux/arch/publish-aur.sh <version> --sha256 <digest>` clones `ssh://aur@aur.archlinux.org/ardia-bin.git`
-  (host keys pinned in `aur_known_hosts`), refuses to go back a version, checks that the release's tarball has the
+  (host keys pinned in `aur_known_hosts`), refuses to go back a version (a nightly counts as older than its stable), checks that the release's tarball has the
   digest, commits and pushes; `--dry-run` clones over HTTPS and pushes nothing. The Release workflow runs it after
   each stable release (docs/linux-ci.md › Linux releases).
   To try a local package, put the PKGBUILD in an empty folder with the tarball renamed
