@@ -82,7 +82,8 @@ The acceptance suite is in [linux-acceptance.md](linux-acceptance.md) and CI in 
   `setBlockAutoplayEverywhere`.
 - **Block autoplay on every site.** As on macOS, a page's autoplay is blocked when its site's autoplay setting is Block,
   or when `webView.setBlockAutoplayEverywhere` is on and the site has no exception of its own (`ac_linux_autoplay.cc`).
-  Turning it on or off re-sends the config to open pages and updates Chromium's own autoplay policy for them.
+  It covers web pages and local files (`http`, `https` and `file`); the shell and extension pages keep Chromium's
+  own policy. Turning it on or off re-sends the config to open pages and updates Chromium's own autoplay policy for them.
 - **Theme swatches.** `ThemeSwatch` (the Mac's `ThemeSwatchView`: the anonymous-ID avatar, the theme editor's
   swatches, preview and colour pad) is drawn by the shell (`shims/shaders.tsx`, `shims/web/gl/themeSwatch.ts`): the
   same 17 Oklab samples and start and end points as `ArcGradientLayer`, the third colour's overlay, the hue pad, and
