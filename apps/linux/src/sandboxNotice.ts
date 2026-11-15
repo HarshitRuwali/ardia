@@ -9,7 +9,7 @@ export function sandboxNotice(decision: string | undefined): { title: string; me
   const reason = decision.replace(/\s+/g, " ").trim().slice(0, 300);
   return {
     title: "Ardia is running without Chromium's sandbox",
-    message: `${reason}. Install Ardia's .deb, or run its tarball's install.sh with sudo, to turn the sandbox on.`,
+    message: `${reason}. Start Ardia without --no-sandbox to turn the sandbox back on.`,
   };
 }
 

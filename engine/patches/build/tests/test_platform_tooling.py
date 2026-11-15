@@ -498,15 +498,17 @@ class PackagingTests(unittest.TestCase):
         variables = {'PATH': os.environ['PATH'], **env.get('vars', {})}
         return subprocess.run([str(runtime / 'ardia-launch'), '--marker', *extra], capture_output=True, text=True, timeout=30, env=variables)
 
-    def test_the_launcher_keeps_the_sandbox_and_only_an_appimage_runs_without_it_saying_why(self):
+    def test_the_launcher_keeps_the_sandbox_and_runs_without_it_only_when_asked(self):
         restricted = {'sys/kernel/apparmor_restrict_unprivileged_userns': '1'}
         cases = [
             ('user namespaces', {}, (), 0, ['--marker']),
             ('a profile grants userns', {'proc': restricted, 'profile': 'profile ardia CHROME flags=(unconfined) {\n  userns,\n}\n'}, (), 0, ['--marker']),
-            ('AppImage, restricted', {'proc': restricted, 'vars': {'APPIMAGE': '/tmp/Ardia.AppImage'}}, (), 0, None),
+            ('AppImage, restricted', {'proc': restricted, 'vars': {'APPIMAGE': '/tmp/Ardia.AppImage'}}, (), 1, None),
+            ('AppImage, clone off', {'proc': {'sys/kernel/unprivileged_userns_clone': '0'}, 'vars': {'APPIMAGE': '/tmp/Ardia.AppImage'}}, (), 1, None),
             ('extracted, restricted', {'proc': restricted}, (), 1, None),
             ('namespaces off', {'proc': {'sys/user/max_user_namespaces': '0'}}, (), 1, None),
             ('asked', {'proc': restricted}, ('--no-sandbox',), 0, None),
+            ('AppImage, asked', {'proc': restricted, 'vars': {'APPIMAGE': '/tmp/Ardia.AppImage'}}, ('--no-sandbox',), 0, None),
         ]
         for label, env, extra, code, expected in cases:
             with self.subTest(label), tempfile.TemporaryDirectory() as scratch:
@@ -515,15 +517,18 @@ class PackagingTests(unittest.TestCase):
                 lines = result.stdout.splitlines()
                 if expected is not None:
                     self.assertEqual(lines, expected)
-                if label == 'AppImage, restricted':
-                    self.assertEqual(lines[0], '--no-sandbox')
-                    self.assertTrue(lines[1].startswith('--ardia-sandbox-decision=AppArmor restricts unprivileged user namespaces'), lines)
-                    self.assertEqual(lines[2:], ['--marker'])
                 if code == 1:
                     self.assertEqual(lines, [])
                     self.assertIn("can't start Chromium's sandbox", result.stderr)
-                if label == 'asked':
-                    self.assertEqual(lines, ['--ardia-sandbox-decision=--no-sandbox was passed', '--marker', '--no-sandbox'])
+                if label.startswith('AppImage') and code == 1:
+                    self.assertIn("Ardia won't run without the sandbox", result.stderr)
+                    self.assertIn("Install Ardia's .deb, which sets up the sandbox helper and its AppArmor profile", result.stderr)
+                if label == 'AppImage, restricted':
+                    self.assertIn('allow user namespaces with sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0.', result.stderr)
+                if label == 'AppImage, clone off':
+                    self.assertIn('allow user namespaces with sudo sysctl -w kernel.unprivileged_userns_clone=1.', result.stderr)
+                if label in ('asked', 'AppImage, asked'):
+                    self.assertEqual(lines, ['--ardia-sandbox-decision=Ardia was started with --no-sandbox', '--marker', '--no-sandbox'])
 
     @unittest.skipUnless(shutil.which('dpkg-deb'), 'dpkg-deb is required')
     def test_the_deb_installs_under_usr_with_a_setuid_helper_the_policy_and_the_apparmor_profile(self):

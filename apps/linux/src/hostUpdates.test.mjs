@@ -144,11 +144,12 @@ test("the switch refresh through the native host updates the cached switches", a
   assert.equal(await refreshSwitches(linuxSwitchesFetch(host, async () => { throw new Error("the shell can't fetch"); })), "updated");
 });
 
-test("a launch the launcher ran without the sandbox says why once, in the window that ran the launch, and counts it", async () => {
+test("a launch started with --no-sandbox says why once, in the window that ran the launch, and counts it", async () => {
   const { noticeUnsandboxedLaunch, sandboxNotice } = await import("./sandboxNotice.ts");
   assert.equal(sandboxNotice(undefined), null);
-  const reason = "AppArmor restricts unprivileged user namespaces and no AppArmor profile grants them to /tmp/.mount_x/lib/ardia/chrome, and an AppImage can't carry Chromium's setuid sandbox helper";
-  assert.match(sandboxNotice(reason).message, /^AppArmor restricts .* helper\. Install Ardia's \.deb/);
+  const reason = "Ardia was started with --no-sandbox";
+  assert.equal(sandboxNotice(reason).message, "Ardia was started with --no-sandbox. Start Ardia without --no-sandbox to turn the sandbox back on.");
+  assert.match(sandboxNotice("--no-sandbox was passed to chrome directly").message, /^--no-sandbox was passed to chrome directly\. Start Ardia without --no-sandbox/);
   takeUpdateCounts();
   const shown = [];
   const host = { bootstrap: { sandboxDecision: reason } };

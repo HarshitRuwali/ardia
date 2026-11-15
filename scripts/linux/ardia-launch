@@ -4,6 +4,7 @@ here=$(dirname -- "$(readlink -f -- "${BASH_SOURCE[0]}")")
 chrome="$here/chrome"
 helper="$here/chrome-sandbox"
 why=""
+allow=""
 
 number() {
   if [[ -r "$1" ]]; then tr -dc '0-9' < "$1"; else printf '%s' "$2"; fi
@@ -22,14 +23,17 @@ apparmor_grants_userns() {
 userns_ready() {
   if [[ "$(number /proc/sys/user/max_user_namespaces 1)" == 0 ]]; then
     why="user namespaces are off (user.max_user_namespaces=0)"
+    allow="sudo sysctl -w user.max_user_namespaces=15000"
     return 1
   fi
   if [[ "$(number /proc/sys/kernel/unprivileged_userns_clone 1)" == 0 ]]; then
     why="unprivileged user namespaces are off (kernel.unprivileged_userns_clone=0)"
+    allow="sudo sysctl -w kernel.unprivileged_userns_clone=1"
     return 1
   fi
   if [[ "$(number /proc/sys/kernel/apparmor_restrict_unprivileged_userns 0)" == 1 ]] && ! apparmor_grants_userns; then
     why="AppArmor restricts unprivileged user namespaces and no AppArmor profile grants them to $chrome"
+    allow="sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0"
     return 1
   fi
   return 0
@@ -45,7 +49,7 @@ setuid_ready() {
 
 for argument in "$@"; do
   if [[ "$argument" == --no-sandbox ]]; then
-    exec "$chrome" "--ardia-sandbox-decision=--no-sandbox was passed" "$@"
+    exec "$chrome" "--ardia-sandbox-decision=Ardia was started with --no-sandbox" "$@"
   fi
 done
 
@@ -53,14 +57,13 @@ if userns_ready || setuid_ready; then
   exec "$chrome" "$@"
 fi
 
-if [[ -n "${APPIMAGE:-}" ]]; then
-  exec "$chrome" --no-sandbox "--ardia-sandbox-decision=$why, and an AppImage can't carry Chromium's setuid sandbox helper" "$@"
-fi
-
 installer=$(readlink -f -- "$here/../../install.sh" 2>/dev/null || true)
 {
   printf 'Ardia can'"'"'t start Chromium'"'"'s sandbox here: %s.\n' "$why"
-  if [[ -n "$installer" && -f "$installer" ]]; then
+  if [[ -n "${APPIMAGE:-}" ]]; then
+    printf 'An AppImage can'"'"'t carry Chromium'"'"'s setuid sandbox helper, and Ardia won'"'"'t run without the sandbox.\n'
+    printf 'Install Ardia'"'"'s .deb, which sets up the sandbox helper and its AppArmor profile, or allow user namespaces with %s.\n' "$allow"
+  elif [[ -n "$installer" && -f "$installer" ]]; then
     printf 'Install it with sudo %s, which sets up the sandbox, or install Ardia'"'"'s .deb.\n' "$installer"
   else
     printf 'Reinstall Ardia'"'"'s package as root so its sandbox helper is set up.\n'

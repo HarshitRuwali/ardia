@@ -508,15 +508,18 @@ python3 scripts/linux/package.py \
   builds all three and smoke-tests each.
 - **Launcher.** Every format starts through `lib/ardia/ardia-launch`, which decides the sandbox before it runs
   `chrome`: user namespaces when the kernel allows them and AppArmor doesn't restrict them (or a profile grants
-  `userns` to this `chrome`), else the setuid-root `chrome-sandbox` beside it on a mount without `nosuid`. Otherwise an
-  AppImage runs with `--no-sandbox` and `--ardia-sandbox-decision=<why>` (the shell says so once per launch and counts
-  `launches_without_sandbox`), and a tarball run in place says how to fix it and exits.
+  `userns` to this `chrome`), else the setuid-root `chrome-sandbox` beside it on a mount without `nosuid`. Otherwise it
+  says why on stderr and exits 1, whatever the format: Ardia never runs without the sandbox on its own. A tarball run
+  in place points at `sudo install.sh` or the `.deb`; an AppImage points at the `.deb` (the sandbox helper and the
+  AppArmor profile) or at the `sysctl` that allows user namespaces for the reason it found. Only a user who passes
+  `--no-sandbox` runs without it: the launcher adds `--ardia-sandbox-decision=Ardia was started with --no-sandbox`, and
+  the shell says so once per launch and counts `launches_without_sandbox`.
 - **`.deb`.** Installs under `/usr` (`/usr/bin/ardia` links the launcher), with `chrome-sandbox` setuid root, the
   polkit policy and the AppArmor profile, which its `postinst` installs and loads on AppArmor 4 and its `postrm`
   removes. Version `0.2.47-nightly.2` becomes `0.2.47~nightly.2` so a nightly sorts before its release.
 - **AppImage.** AppImage's static type 2 runtime and `mksquashfs` (zstd) from a toolset pinned by SHA-256, cached in
   `~/.cache/ardia-appimage`. It carries no setuid helper and no polkit policy, so reauth falls back to the login
-  password.
+  password, and it needs user namespaces: where they're restricted (Ubuntu 24.04 and later) it refuses to start.
 
 That makes a dev package. A release adds `--version <version>` and `--cli <dist>/ardia-cli-<version>-linux-x64.tar.gz`.
 `scripts/linux/release.sh <version>` runs the whole release build, the smoke gate included, and prints the upload
@@ -1797,9 +1800,9 @@ These were open at the time of the PR.
     `appModuleFallbacks.ts`.
 - **Packaging.**
   - There is no AUR package yet; the `PKGBUILD` builds from a local tarball.
-  - An AppImage can't carry a setuid helper. Where user namespaces are restricted (Ubuntu 24.04 without Ardia's
-    AppArmor profile) it runs without Chromium's sandbox and says so once per launch; the `.deb` and `install.sh` set
-    the sandbox up.
+  - An AppImage can't carry a setuid helper, so where user namespaces are restricted (Ubuntu 24.04 and later
+    without Ardia's AppArmor profile) it refuses to start, like the tarball, and says to install the `.deb` or allow
+    user namespaces. The `.deb` and `install.sh` set the sandbox up.
 - **Sync.** One read has no total size cap (each file is capped at 64 MiB). Linux and macOS sharing a real folder has
   not been run end to end with a Mac.
 - **Shared, not Linux-specific.** The Google Drive OAuth flow uses `Math.random` state, plain PKCE and a loopback
