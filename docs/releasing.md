@@ -253,6 +253,8 @@ The Linux package ships on the same GitHub release. The Release workflow's `linu
 `scripts/linux/release.sh <version> --engine exact`, and `publish.sh` attaches the assets when it creates the release:
 
 - `Ardia-<version>-linux-x64.tar.xz` and its `.sha256`: the browser, with `lib/ardia/VERSION` and the bundled CLI.
+- `Ardia-<version>-linux-x64.deb` and `Ardia-<version>-linux-x64.AppImage`, each with its `.sha256`: the same build
+  as a Debian package (setuid sandbox helper, polkit policy, AppArmor profile) and as an AppImage.
 - `ardia-cli-<version>-linux-x64.tar.gz` and its `.sha256`: the `ardia` command for Linux.
 
 The script refuses what `release.sh` refuses: a missing notes file or one whose frontmatter doesn't read, a
