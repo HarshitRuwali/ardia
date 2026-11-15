@@ -72,3 +72,21 @@ test("an intro skipped while its track is still loading never starts the music",
   assert.equal(players.length, 1, "a play after the skip still plays");
   assert.deepEqual(played, [true]);
 });
+
+test("muting or unmuting the intro while its track is still loading is the volume the music starts at", async () => {
+  let loaded;
+  const slowTrack = () => new Promise((resolve) => (loaded = resolve));
+  players.length = 0;
+  const music = linuxIntroMusic({ host: hostWith({}), track: slowTrack, createPlayer });
+  const muting = music.playIntroMusic({}, false);
+  await music.setIntroMusicMuted(true);
+  loaded("/assets/IntroMusic-test.wav");
+  await muting;
+  assert.equal(players.at(-1).volume, 0, "muted during the load starts silent");
+  const unmuting = music.playIntroMusic({}, true);
+  await music.setIntroMusicMuted(false);
+  loaded("/assets/IntroMusic-test.wav");
+  await unmuting;
+  assert.equal(players.at(-1).volume, 1, "unmuted during the load starts audible");
+  assert.equal(players.length, 2);
+});

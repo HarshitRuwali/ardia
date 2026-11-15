@@ -18,7 +18,7 @@ export function introMusicSilenced(host?: ArdiaHost): boolean {
 
 export function linuxIntroMusic({ host, track = bundledTrack, createPlayer = (src) => new Audio(src), onPlayed }: IntroMusicOptions = {}) {
   let playing: Player | null = null;
-  let request = 0;
+  let loading: { muted: boolean } | null = null;
   let fading: ReturnType<typeof setInterval> | undefined;
 
   const fade = (target: number, seconds: number, stopAfter: boolean) => {
@@ -48,14 +48,16 @@ export function linuxIntroMusic({ host, track = bundledTrack, createPlayer = (sr
   return {
     playIntroMusic: async (_cues: unknown, muted: unknown) => {
       if (introMusicSilenced(host)) return;
-      const mine = ++request;
+      const load = { muted: muted === true };
+      loading = load;
       const src = await track().catch(() => null);
-      if (mine !== request) return;
+      if (loading !== load) return;
+      loading = null;
       if (!src) return onPlayed?.(false);
       clearInterval(fading);
       playing?.pause();
       const audio = createPlayer(src);
-      audio.volume = muted === true ? 0 : 1;
+      audio.volume = load.muted ? 0 : 1;
       audio.addEventListener("ended", () => {
         if (playing === audio) playing = null;
       });
@@ -69,9 +71,12 @@ export function linuxIntroMusic({ host, track = bundledTrack, createPlayer = (sr
         },
       );
     },
-    setIntroMusicMuted: async (muted: unknown) => fade(muted === true ? 0 : 1, MUTE_FADE_SECONDS, false),
+    setIntroMusicMuted: async (muted: unknown) => {
+      if (loading) loading.muted = muted === true;
+      fade(muted === true ? 0 : 1, MUTE_FADE_SECONDS, false);
+    },
     stopIntroMusic: async (seconds: unknown) => {
-      request++;
+      loading = null;
       fade(0, Math.max(0, Number(seconds) || 0), true);
     },
   };
