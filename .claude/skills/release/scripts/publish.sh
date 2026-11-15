@@ -40,7 +40,8 @@ if [ -d "$linux" ]; then
   linux_cli="$linux/ardia-cli-$version-linux-x64.tar.gz"
   linux_deb="$linux/Ardia-$version-linux-x64.deb"
   linux_appimage="$linux/Ardia-$version-linux-x64.AppImage"
-  for file in "$linux_package" "$linux_package.sha256" "$linux_deb" "$linux_deb.sha256" "$linux_appimage" "$linux_appimage.sha256" "$linux_cli" "$linux_cli.sha256"; do
+  linux_apt_deb="$linux/ardia_${version}_amd64.deb"
+  for file in "$linux_package" "$linux_package.sha256" "$linux_deb" "$linux_deb.sha256" "$linux_appimage" "$linux_appimage.sha256" "$linux_apt_deb" "$linux_apt_deb.sha256" "$linux_cli" "$linux_cli.sha256"; do
     [ -f "$file" ] || die "$linux has no $(basename "$file") (scripts/linux/release.sh $version first, or remove $linux to publish without Linux)"
     assets+=("$file")
   done
@@ -48,7 +49,7 @@ if [ -d "$linux" ]; then
   [ -f "$provenance" ] || die "$linux has no provenance.txt"
   grep -q '^engine key [0-9a-f]\{40\} (exact)' "$provenance" && ! grep -q 'uncommitted changes' "$provenance" \
     || die "$linux is a Linux test build (an inexact engine or uncommitted changes, $provenance), not a release"
-  (cd "$linux" && shasum -a 256 -c --quiet "${linux_package##*/}.sha256" "${linux_deb##*/}.sha256" "${linux_appimage##*/}.sha256" "${linux_cli##*/}.sha256") \
+  (cd "$linux" && shasum -a 256 -c --quiet "${linux_package##*/}.sha256" "${linux_deb##*/}.sha256" "${linux_appimage##*/}.sha256" "${linux_apt_deb##*/}.sha256" "${linux_cli##*/}.sha256") \
     || die "the Linux assets in $linux don't match their .sha256 files"
   echo "PASS  the Linux tarball, .deb, AppImage and CLI join the release"
 else

@@ -259,7 +259,12 @@ The Linux package ships on the same GitHub release. The Release workflow's `linu
 - `Ardia-<version>-linux-x64.tar.xz` and its `.sha256`: the browser, with `lib/ardia/VERSION` and the bundled CLI.
 - `Ardia-<version>-linux-x64.deb` and `Ardia-<version>-linux-x64.AppImage`, each with its `.sha256`: the same build
   as a Debian package (setuid sandbox helper, polkit policy, AppArmor profile) and as an AppImage.
+- `ardia_<version>_amd64.deb` and its `.sha256`: the same files as a Debian package, built from that tarball and
+  installed and purged in Debian 13 and Ubuntu 24.04 containers before it ships.
 - `ardia-cli-<version>-linux-x64.tar.gz` and its `.sha256`: the `ardia` command for Linux.
+
+After a stable release, the workflow's `aur` job moves the AUR package `ardia-bin` to the new tarball when the
+`AUR_SSH_PRIVATE_KEY` secret is set ([linux-ci.md](linux-ci.md) › The AUR).
 
 The script refuses what `release.sh` refuses: a missing notes file or one whose frontmatter doesn't read, a
 `MARKETING_VERSION` other than `<version>`, and uncommitted changes (here under `apps/browser`, `apps/linux`,

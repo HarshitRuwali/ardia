@@ -165,13 +165,34 @@ def package(output, ui, destination, content_blocker=None, version=None, cli=Non
             target.parent.mkdir(parents=True)
             shutil.copyfile(icon, target)
         normalize_modes(root)
-        with tarfile.open(destination, 'x:xz') as archive:
-            archive.add(root, arcname='ardia')
+        write_archive(root, destination)
         if deb is not None:
             linux_formats.build_deb(root, deb, version)
         if appimage is not None:
             linux_formats.build_appimage(root, appimage)
     return destination
+
+
+def write_archive(root, destination):
+    with destination.open('xb') as handle:
+        try:
+            xz = subprocess.Popen(['xz', '-T0', '-6', '-c'], stdin=subprocess.PIPE, stdout=handle)
+        except OSError:
+            destination.unlink(missing_ok=True)
+            raise
+        try:
+            with tarfile.open(fileobj=xz.stdin, mode='w|', format=tarfile.PAX_FORMAT) as archive:
+                archive.add(root, arcname='ardia')
+        except BaseException:
+            xz.kill()
+            xz.wait()
+            destination.unlink(missing_ok=True)
+            raise
+        finally:
+            xz.stdin.close()
+        if xz.wait() != 0:
+            destination.unlink(missing_ok=True)
+            raise OSError(f'xz exited {xz.returncode} while writing {destination}')
 
 
 def main():

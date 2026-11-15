@@ -5,9 +5,10 @@ usage='usage: scripts/linux/release.sh <version> [--engine exact|nearest|<dir>] 
 Builds the Linux x64 release of Ardia <version> (a -nightly.<n> version is a
 nightly), the Linux counterpart of scripts/release.sh: it fetches the engine,
 builds apps/linux/dist and the ardia CLI, prepares uBlock Origin, packages
-Ardia-<version>-linux-x64.tar.xz with lib/ardia/VERSION and the CLI, writes
-the .sha256 files and provenance.txt, and runs the smoke gate. It never
-publishes: it prints the gh release upload command for the assets.
+Ardia-<version>-linux-x64.tar.xz with lib/ardia/VERSION and the CLI, runs the
+smoke gate, builds ardia_<version>_amd64.deb from that tarball
+(scripts/linux/deb.py), and writes the .sha256 files and provenance.txt. It
+never publishes: it prints the gh release upload command for the assets.
 
   --engine exact     the published engine of this commit'"'"'s engine key (default;
                      a release must match its source)
@@ -25,7 +26,8 @@ publishes: it prints the gh release upload command for the assets.
 It needs MARKETING_VERSION to be <version> and docs/release-notes/<version>.md,
 as scripts/release.sh does: the Linux assets go on the GitHub release the
 macOS release made. pnpm comes from PATH, else
-~/ardia-linux-build-156/tools/pnpm/node_modules/.bin.'
+~/ardia-linux-build-156/tools/pnpm/node_modules/.bin. The .deb needs dpkg-deb
+and readelf (apt install dpkg binutils, pacman -S dpkg binutils).'
 
 die() { echo "release.sh: $*" >&2; exit 1; }
 warn() { echo "warning: $*" >&2; }
@@ -69,7 +71,7 @@ if ! command -v pnpm >/dev/null; then
   [ -x "$fallback/pnpm" ] || die "pnpm is neither on PATH nor in $fallback"
   PATH="$fallback:$PATH"
 fi
-for tool in node python3 sha256sum tar xz git dpkg-deb; do
+for tool in node python3 sha256sum tar xz git dpkg-deb readelf; do
   command -v "$tool" >/dev/null || die "$tool is required"
 done
 node scripts/lib/release-note.mjs "docs/release-notes/$version.md" headline >/dev/null \
@@ -80,6 +82,7 @@ release_output_entry() {
     provenance.txt|ui-build.log|cli-build.log|ubo.log|smoke|smoke-deb|smoke-appimage) return 0 ;;
     Ardia-*-linux-x64.tar.xz|Ardia-*-linux-x64.tar.xz.sha256) return 0 ;;
     Ardia-*-linux-x64.deb|Ardia-*-linux-x64.deb.sha256|Ardia-*-linux-x64.AppImage|Ardia-*-linux-x64.AppImage.sha256) return 0 ;;
+    ardia_*_amd64.deb|ardia_*_amd64.deb.sha256|.ardia_*_amd64.deb.partial) return 0 ;;
     ardia-cli-*-linux-x64.tar.gz|ardia-cli-*-linux-x64.tar.gz.sha256|ardia-cli-*-linux-x64.tar.gz.part) return 0 ;;
   esac
   return 1
@@ -102,6 +105,7 @@ package_name="Ardia-$version-linux-x64.tar.xz"
 deb_name="Ardia-$version-linux-x64.deb"
 appimage_name="Ardia-$version-linux-x64.AppImage"
 cli_name="ardia-cli-$version-linux-x64.tar.gz"
+apt_deb_name="ardia_${version}_amd64.deb"
 
 echo "==> Engine ($engine_mode)"
 case "$engine_mode" in
@@ -178,12 +182,22 @@ node scripts/linux/smoke.mjs --package "$out/$deb_name" --results "$out/smoke-de
 node scripts/linux/smoke.mjs --package "$out/$appimage_name" --results "$out/smoke-appimage" --timeout-ms 600000 "${smoke_extra[@]}" \
   || die "the smoke gate failed for the AppImage ($out/smoke-appimage/results.json)"
 
+echo "==> Debian package"
+python3 scripts/linux/deb.py --package "$out/$package_name" --version "$version" --destination "$out/$apt_deb_name" >/dev/null \
+  || die "building $apt_deb_name failed (above)"
+(cd "$out" && sha256sum "$apt_deb_name" > "$apt_deb_name.sha256")
+echo "deb $(cut -d' ' -f1 "$out/$apt_deb_name.sha256")  $apt_deb_name" >> "$out/provenance.txt"
+
 echo
 [ "$exact" = 1 ] || echo "NOT a release: built against engine $engine_label, not this commit's ${head_key:0:12}."
 [ -z "$dirty" ] || echo "NOT a release: built with uncommitted changes."
-du -sh "$out/$package_name" "$out/$deb_name" "$out/$appimage_name" "$out/$cli_name"
+du -sh "$out/$package_name" "$out/$deb_name" "$out/$appimage_name" "$out/$apt_deb_name" "$out/$cli_name"
 echo
 echo "Publish it on the v$version release (made by the macOS release) with:"
-printf '  gh release upload v%s -R %s %q %q %q %q %q %q %q %q\n' "$version" "$REPO" \
+printf '  gh release upload v%s -R %s %q %q %q %q %q %q %q %q %q %q\n' "$version" "$REPO" \
   "$out/$package_name" "$out/$package_name.sha256" "$out/$deb_name" "$out/$deb_name.sha256" \
-  "$out/$appimage_name" "$out/$appimage_name.sha256" "$out/$cli_name" "$out/$cli_name.sha256"
+  "$out/$appimage_name" "$out/$appimage_name.sha256" "$out/$apt_deb_name" "$out/$apt_deb_name.sha256" "$out/$cli_name" "$out/$cli_name.sha256"
+if [ "$channel" = stable ]; then
+  echo "then update the AUR package (docs/linux-port.md › Arch) from the published tarball's digest:"
+  printf '  scripts/linux/arch/update-pkgbuild.sh %s --package %q --out <ardia-bin AUR checkout>\n' "$version" "$out/$package_name"
+fi

@@ -1,0 +1,105 @@
+#!/usr/bin/env python3
+import importlib.util
+import pathlib
+import shutil
+import subprocess
+import sys
+import tempfile
+import unittest
+
+REPO = pathlib.Path(__file__).resolve().parents[4]
+LINUX = REPO / 'scripts/linux'
+ARCH = LINUX / 'arch'
+ELF = pathlib.Path(shutil.which('true') or '/usr/bin/true')
+DIGEST = 'ab' * 32
+
+sys.dont_write_bytecode = True
+spec = importlib.util.spec_from_file_location('deb', LINUX / 'deb.py')
+deb = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(deb)
+
+
+def run(*args):
+    return subprocess.run([str(arg) for arg in args], capture_output=True, text=True)
+
+
+class DebVersionTests(unittest.TestCase):
+    def test_a_nightly_sorts_before_its_stable(self):
+        self.assertEqual(deb.debian_version('0.2.47'), '0.2.47')
+        self.assertEqual(deb.debian_version('0.2.47-nightly.3'), '0.2.47~nightly.3')
+        self.assertEqual(deb.deb_name('0.2.47-nightly.3'), 'ardia_0.2.47-nightly.3_amd64.deb')
+        with self.assertRaisesRegex(deb.DebError, 'bad version'):
+            deb.debian_version('0.2')
+
+
+@unittest.skipUnless(shutil.which('readelf') and ELF.is_file(), 'readelf and an ELF executable')
+class DebDependsTests(unittest.TestCase):
+    def runtime(self, scratch, needed):
+        runtime = pathlib.Path(scratch) / 'usr/lib/ardia'
+        runtime.mkdir(parents=True)
+        shutil.copyfile(ELF, runtime / 'chrome')
+        shutil.copyfile(ELF, runtime / 'libqt6_shim.so')
+        shutil.copyfile(ELF, runtime / 'libEGL.so')
+        self.needed = needed
+        return runtime
+
+    def setUp(self):
+        self.original = deb.needed_libraries
+        deb.needed_libraries = lambda path: self.needed.get(path.name, [])
+
+    def tearDown(self):
+        deb.needed_libraries = self.original
+
+    def test_sonames_map_to_packages_once_and_bundled_or_optional_ones_are_skipped(self):
+        with tempfile.TemporaryDirectory() as scratch:
+            runtime = self.runtime(scratch, {'chrome': ['libc.so.6', 'libnss3.so', 'libsmime3.so', 'libEGL.so', 'libgio-2.0.so.0', 'libglib-2.0.so.0']})
+            packages = deb.depends(runtime)
+        self.assertRegex(packages[0], r'^libc6 \(>= 2\.[0-9]+\)$')
+        self.assertEqual(packages.count('libnss3'), 1)
+        self.assertEqual(packages.count('libglib2.0-0t64 | libglib2.0-0'), 1)
+        self.assertIn('libgtk-3-0t64 | libgtk-3-0', packages)
+        self.assertIn('polkitd | policykit-1', packages)
+        self.assertFalse([package for package in packages if 'qt' in package.lower()])
+
+    def test_an_unknown_soname_fails_the_build(self):
+        with tempfile.TemporaryDirectory() as scratch:
+            runtime = self.runtime(scratch, {'chrome': ['libc.so.6', 'libnew.so.1']})
+            with self.assertRaisesRegex(deb.DebError, 'libnew.so.1'):
+                deb.depends(runtime)
+
+
+class PkgbuildTests(unittest.TestCase):
+    def test_committed_srcinfo_matches_the_pkgbuild(self):
+        result = run(ARCH / 'update-pkgbuild.sh', '--check')
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
+    def test_update_pins_the_release_tarball(self):
+        with tempfile.TemporaryDirectory() as scratch:
+            result = run(ARCH / 'update-pkgbuild.sh', '0.2.48-nightly.1', '--sha256', DIGEST, '--out', scratch)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            pkgbuild = (pathlib.Path(scratch) / 'PKGBUILD').read_text()
+            srcinfo = (pathlib.Path(scratch) / '.SRCINFO').read_text()
+        self.assertIn('pkgver=0.2.48_nightly.1\n', pkgbuild)
+        self.assertIn('pkgrel=1\n', pkgbuild)
+        self.assertIn(f"sha256sums=('{DIGEST}')\n", pkgbuild)
+        self.assertIn('\tpkgver = 0.2.48_nightly.1\n', srcinfo)
+        self.assertIn('\tsource = ardia-bin-0.2.48_nightly.1.tar.xz::https://github.com/ardia-browser/ardia/releases/download/'
+                      'v0.2.48-nightly.1/Ardia-0.2.48-nightly.1-linux-x64.tar.xz\n', srcinfo)
+        self.assertIn(f'\tsha256sums = {DIGEST}\n', srcinfo)
+        self.assertNotIn('SKIP', pkgbuild + srcinfo)
+
+    @unittest.skipUnless(shutil.which('makepkg'), 'makepkg')
+    def test_srcinfo_is_what_makepkg_prints(self):
+        with tempfile.TemporaryDirectory() as scratch:
+            run(ARCH / 'update-pkgbuild.sh', '0.2.48', '--sha256', DIGEST, '--out', scratch)
+            printed = subprocess.run(['makepkg', '--printsrcinfo'], cwd=scratch, capture_output=True, text=True)
+            self.assertEqual(printed.stdout, (pathlib.Path(scratch) / '.SRCINFO').read_text())
+
+    def test_bad_input_is_refused(self):
+        self.assertEqual(run(ARCH / 'update-pkgbuild.sh', '0.2', '--sha256', DIGEST).returncode, 1)
+        self.assertEqual(run(ARCH / 'update-pkgbuild.sh', '0.2.48', '--sha256', 'SKIP').returncode, 1)
+        self.assertEqual(run(ARCH / 'update-pkgbuild.sh', '0.2.48').returncode, 1)
+
+
+if __name__ == '__main__':
+    unittest.main()
