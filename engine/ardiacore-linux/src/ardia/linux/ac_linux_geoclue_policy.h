@@ -62,6 +62,14 @@ inline unsigned AccuracyLevel(bool high_accuracy) {
   return high_accuracy ? kAccuracyExact : kAccuracyCity;
 }
 
+enum class Retune { kNothing, kRemember, kRequestAndRestart, kRequestAndRestartWhenStarted };
+
+inline Retune RetuneFor(bool active, bool requested_high, bool wanted_high, bool have_client, bool running) {
+  if (!active || requested_high == wanted_high) return Retune::kNothing;
+  if (!have_client) return Retune::kRemember;
+  return running ? Retune::kRequestAndRestart : Retune::kRequestAndRestartWhenStarted;
+}
+
 inline bool DeniedByDesktop(std::string_view reason) {
   return reason.find("AccessDenied") != std::string_view::npos ||
          reason.find("not allowed") != std::string_view::npos ||

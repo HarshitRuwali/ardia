@@ -31,6 +31,12 @@ int main() {
   auto no_altitude = FixFrom({{"Latitude", 0}, {"Longitude", 0}, {"Altitude", -1.79769e308}});
   assert(no_altitude && !no_altitude->altitude);
   assert(AccuracyLevel(true) == 8 && AccuracyLevel(false) == 4);
+  assert(RetuneFor(false, false, true, false, false) == Retune::kNothing);
+  assert(RetuneFor(true, false, false, true, true) == Retune::kNothing);
+  assert(RetuneFor(true, false, true, false, false) == Retune::kRemember);
+  assert(RetuneFor(true, false, true, true, true) == Retune::kRequestAndRestart);
+  assert(RetuneFor(true, false, true, true, false) == Retune::kRequestAndRestartWhenStarted);
+  assert(RetuneFor(true, true, false, true, true) == Retune::kRequestAndRestart);
   assert(DeniedByDesktop("org.freedesktop.DBus.Error.AccessDenied: Agent rejected 'ardia'"));
   assert(DeniedByDesktop("Geolocation disabled for UID 1000"));
   assert(!DeniedByDesktop("org.freedesktop.DBus.Error.ServiceUnknown: The name org.freedesktop.GeoClue2 was not provided"));
@@ -66,6 +72,22 @@ class GeoClueTests(unittest.TestCase):
         host = (LINUX / 'ac_linux_host.cc').read_text()
         self.assertIn('ardia::InstallLinuxLocationProvider();', host)
         self.assertIn('.Append("ArdiaLocation.locationPermission")', host)
+
+    def test_a_precise_request_after_a_coarse_one_raises_the_running_client_and_its_end_lowers_it(self):
+        provider = (LINUX / 'ac_linux_geoclue.cc').read_text()
+        start = provider[provider.index('void StartProvider(bool enable_high_accuracy) override {'):]
+        start = start[:start.index('\n  }\n')]
+        self.assertIn('if (relay_ && relay_->high_accuracy() == enable_high_accuracy) return;', start)
+        self.assertIn('StopProvider();', start)
+        watch = provider[provider.index('void Watch('):provider.index('bool DeniedByDesktop()')]
+        self.assertEqual(watch.count('Retune();'), 2, 'Watch and Unwatch both retune the shared client')
+        self.assertIn('Start(WantsHighAccuracy());', watch)
+        retune = provider[provider.index('void Retune() {'):provider.index('void RequestAccuracy() {')]
+        self.assertIn('geoclue::RetuneFor(', retune)
+        self.assertIn('return Restart();', retune)
+        self.assertIn('restart_when_started_ = true;', retune)
+        self.assertIn('if (std::exchange(restart_when_started_, false)) return Restart();', provider)
+        self.assertIn('if (state_ != State::kStarting || !client_.IsValid()) return;', provider, 'a Start answered after Stop leaves the client stopped')
 
 
 if __name__ == '__main__':

@@ -78,6 +78,7 @@ class GeoClue {
     DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
     idle_timer_.Stop();
     relays_.insert(relay);
+    Retune();
     if (latest_) return relay->Send(latest_);
     if (state_ == State::kUnavailable &&
         base::TimeTicks::Now() - unavailable_since_ < base::Seconds(geoclue::kRetryUnavailableSeconds)) {
@@ -85,12 +86,13 @@ class GeoClue {
     }
     first_fix_timer_.Start(FROM_HERE, base::Seconds(geoclue::kFirstFixSeconds),
                            base::BindOnce(&GeoClue::NoFirstFix, weak_factory_.GetWeakPtr()));
-    if (state_ == State::kIdle || state_ == State::kUnavailable) Start(relay->high_accuracy());
+    if (state_ == State::kIdle || state_ == State::kUnavailable) Start(WantsHighAccuracy());
   }
 
   void Unwatch(scoped_refptr<Relay> relay) {
     DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
     relays_.erase(relay);
+    Retune();
     if (relays_.empty()) {
       idle_timer_.Start(FROM_HERE, base::Seconds(geoclue::kIdleStopSeconds),
                         base::BindOnce(&GeoClue::Stop, weak_factory_.GetWeakPtr()));
@@ -107,11 +109,47 @@ class GeoClue {
 
   dbus::ObjectProxy* Proxy(const dbus::ObjectPath& path) { return bus_->GetObjectProxy(geoclue::kService, path); }
 
+  bool WantsHighAccuracy() const {
+    for (const scoped_refptr<Relay>& relay : relays_) {
+      if (relay->high_accuracy()) return true;
+    }
+    return false;
+  }
+
+  void Retune() {
+    if (relays_.empty()) return;
+    const bool wanted = WantsHighAccuracy();
+    const geoclue::Retune step =
+        geoclue::RetuneFor(state_ == State::kStarting || state_ == State::kRunning, high_accuracy_, wanted,
+                           client_.IsValid() && client_.value() != "/", state_ == State::kRunning);
+    if (step == geoclue::Retune::kNothing) return;
+    high_accuracy_ = wanted;
+    if (step == geoclue::Retune::kRemember) return;
+    RequestAccuracy();
+    if (step == geoclue::Retune::kRequestAndRestart) return Restart();
+    restart_when_started_ = true;
+  }
+
+  void RequestAccuracy() {
+    const unsigned level = geoclue::AccuracyLevel(high_accuracy_);
+    SetProperty("RequestedAccuracyLevel", [level](dbus::MessageWriter& writer) { writer.AppendVariantOfUint32(level); });
+  }
+
+  void Restart() {
+    state_ = State::kStarting;
+    dbus::MethodCall stop(geoclue::kClient, "Stop");
+    Proxy(client_)->CallMethod(&stop, geoclue::kCallTimeoutMs, base::DoNothing());
+    dbus::MethodCall start(geoclue::kClient, "Start");
+    Proxy(client_)->CallMethodWithErrorResponse(&start, geoclue::kCallTimeoutMs,
+                                                base::BindOnce(&GeoClue::Started, weak_factory_.GetWeakPtr()));
+  }
+
   void Start(bool high_accuracy) {
     bus_ = dbus_thread_linux::GetSharedSystemBus();
     if (!bus_) return GiveUp("no system bus");
     state_ = State::kStarting;
     high_accuracy_ = high_accuracy;
+    restart_when_started_ = false;
     dbus::MethodCall call(geoclue::kManager, "GetClient");
     Proxy(dbus::ObjectPath(geoclue::kManagerPath))
         ->CallMethodWithErrorResponse(&call, geoclue::kCallTimeoutMs,
@@ -132,8 +170,7 @@ class GeoClue {
     }
     client_ = path;
     SetProperty("DesktopId", [](dbus::MessageWriter& writer) { writer.AppendVariantOfString(geoclue::kDesktopId); });
-    const unsigned level = geoclue::AccuracyLevel(high_accuracy_);
-    SetProperty("RequestedAccuracyLevel", [level](dbus::MessageWriter& writer) { writer.AppendVariantOfUint32(level); });
+    RequestAccuracy();
     Proxy(client_)->ConnectToSignal(geoclue::kClient, "LocationUpdated",
                                     base::BindRepeating(&GeoClue::LocationUpdated, weak_factory_.GetWeakPtr()),
                                     base::DoNothing());
@@ -153,7 +190,9 @@ class GeoClue {
   }
 
   void Started(dbus::Response* response, dbus::ErrorResponse* error) {
+    if (state_ != State::kStarting || !client_.IsValid()) return;
     if (!response) return GiveUp(ErrorText(error, "GeoClue didn't start"));
+    if (std::exchange(restart_when_started_, false)) return Restart();
     state_ = State::kRunning;
     dbus::MethodCall call(geoclue::kProperties, "Get");
     dbus::MessageWriter writer(&call);
@@ -235,6 +274,7 @@ class GeoClue {
   scoped_refptr<dbus::Bus> bus_;
   State state_ = State::kIdle;
   bool high_accuracy_ = false;
+  bool restart_when_started_ = false;
   dbus::ObjectPath client_;
   std::optional<Fix> latest_;
   base::TimeTicks unavailable_since_;
@@ -254,7 +294,8 @@ class GeoClueLocationProvider : public device::LocationProvider {
   void SetUpdateCallback(const LocationProviderUpdateCallback& callback) override { callback_ = callback; }
 
   void StartProvider(bool enable_high_accuracy) override {
-    if (relay_) return;
+    if (relay_ && relay_->high_accuracy() == enable_high_accuracy) return;
+    StopProvider();
     relay_ = base::MakeRefCounted<Relay>(base::SequencedTaskRunner::GetCurrentDefault(),
                                          base::BindRepeating(&GeoClueLocationProvider::Delivered,
                                                              weak_factory_.GetWeakPtr()),
