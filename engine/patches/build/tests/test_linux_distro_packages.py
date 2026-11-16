@@ -14,9 +14,9 @@ ELF = pathlib.Path(shutil.which('true') or '/usr/bin/true')
 DIGEST = 'ab' * 32
 
 sys.dont_write_bytecode = True
-spec = importlib.util.spec_from_file_location('deb', LINUX / 'deb.py')
-deb = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(deb)
+spec = importlib.util.spec_from_file_location('linux_formats', LINUX / 'linux_formats.py')
+formats = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(formats)
 
 
 def run(*args):
@@ -25,11 +25,19 @@ def run(*args):
 
 class DebVersionTests(unittest.TestCase):
     def test_a_nightly_sorts_before_its_stable(self):
-        self.assertEqual(deb.debian_version('0.2.47'), '0.2.47')
-        self.assertEqual(deb.debian_version('0.2.47-nightly.3'), '0.2.47~nightly.3')
-        self.assertEqual(deb.deb_name('0.2.47-nightly.3'), 'ardia_0.2.47-nightly.3_amd64.deb')
-        with self.assertRaisesRegex(deb.DebError, 'bad version'):
-            deb.debian_version('0.2')
+        self.assertEqual(formats.deb_version('0.2.47'), '0.2.47')
+        self.assertEqual(formats.deb_version('0.2.47-nightly.3'), '0.2.47~nightly.3')
+        for bad in ('0.2', None):
+            with self.assertRaisesRegex(ValueError, 'bad version'):
+                formats.deb_version(bad)
+
+    @unittest.skipUnless(shutil.which('dpkg'), 'dpkg')
+    def test_dpkg_upgrades_a_nightly_to_its_stable(self):
+        def older(first, second):
+            return run('dpkg', '--compare-versions', formats.deb_version(first), 'lt', formats.deb_version(second)).returncode == 0
+        self.assertTrue(older('0.2.47-nightly.2', '0.2.47-nightly.10'))
+        self.assertTrue(older('0.2.47-nightly.10', '0.2.47'))
+        self.assertTrue(older('0.2.47', '0.2.48-nightly.1'))
 
 
 @unittest.skipUnless(shutil.which('readelf') and ELF.is_file(), 'readelf and an ELF executable')
@@ -44,29 +52,30 @@ class DebDependsTests(unittest.TestCase):
         return runtime
 
     def setUp(self):
-        self.original = deb.needed_libraries
-        deb.needed_libraries = lambda path: self.needed.get(path.name, [])
+        self.original = formats.needed_libraries
+        formats.needed_libraries = lambda path: self.needed.get(path.name, [])
 
     def tearDown(self):
-        deb.needed_libraries = self.original
+        formats.needed_libraries = self.original
 
     def test_sonames_map_to_packages_once_and_bundled_or_optional_ones_are_skipped(self):
         with tempfile.TemporaryDirectory() as scratch:
             runtime = self.runtime(scratch, {'chrome': ['libc.so.6', 'libnss3.so', 'libsmime3.so', 'libEGL.so', 'libgio-2.0.so.0', 'libglib-2.0.so.0']})
-            packages = deb.depends(runtime)
+            packages = formats.deb_depends(runtime)
         self.assertRegex(packages[0], r'^libc6 \(>= 2\.[0-9]+\)$')
         self.assertEqual(packages.count('libnss3'), 1)
         self.assertEqual(packages.count('libglib2.0-0t64 | libglib2.0-0'), 1)
         self.assertIn('libgtk-3-0t64 | libgtk-3-0', packages)
-        self.assertIn('polkitd | policykit-1', packages)
+        self.assertIn('libsecret-1-0', packages)
+        self.assertIn('xdg-utils', packages)
         self.assertIn('curl', packages)
         self.assertFalse([package for package in packages if 'qt' in package.lower()])
 
     def test_an_unknown_soname_fails_the_build(self):
         with tempfile.TemporaryDirectory() as scratch:
             runtime = self.runtime(scratch, {'chrome': ['libc.so.6', 'libnew.so.1']})
-            with self.assertRaisesRegex(deb.DebError, 'libnew.so.1'):
-                deb.depends(runtime)
+            with self.assertRaisesRegex(ValueError, 'libnew.so.1'):
+                formats.deb_depends(runtime)
 
 
 class PkgbuildTests(unittest.TestCase):

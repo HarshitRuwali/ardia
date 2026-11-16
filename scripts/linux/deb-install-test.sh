@@ -1,14 +1,16 @@
 #!/usr/bin/env bash
 set -euo pipefail
-usage='usage: scripts/linux/deb-install-test.sh <ardia_<version>_amd64.deb> [<image>...]
+usage='usage: scripts/linux/deb-install-test.sh <Ardia-<version>-linux-x64.deb> [<image>...]
 
 Installs the .deb with apt in fresh containers (docker or podman) and checks
 that its dependencies resolve, every library chrome needs is found, chrome
---version runs, ardia is an x-www-browser alternative, curl is there for the
-bundled CLI installer, the AppArmor profile is written only where AppArmor reads the
-4.0 ABI, and apt purge leaves the file system as it was before the install.
-The images default to debian:13 and ubuntu:24.04; ubuntu:24.04 also gets the
-apparmor package first, so its run covers the profile.'
+--version runs, chrome-sandbox is setuid root, ardia is an x-www-browser
+alternative, curl is there for the bundled CLI installer, the AppArmor profile
+is written only where AppArmor reads the 4.0 ABI, and apt purge leaves the file
+system as it was before the install. The images default to debian:13 and
+ubuntu:24.04; ubuntu:24.04 also gets the apparmor package first, so its run
+covers the profile. apt retries each download 5 times and each image pull is
+tried 3 times, so one network flake does not fail the test.'
 
 case "${1:-}" in
   -h|--help) echo "$usage"; exit 0 ;;
@@ -25,6 +27,7 @@ engine=$(command -v docker || command -v podman || true)
 check='
 set -euo pipefail
 export DEBIAN_FRONTEND=noninteractive
+echo "Acquire::Retries \"5\";" > /etc/apt/apt.conf.d/80-retries
 fail() { echo "FAIL $*"; exit 1; }
 snapshot() {
   find / -xdev \( -path /proc -o -path /sys -o -path /dev -o -path /run -o -path /tmp -o -path /var/log \
@@ -44,6 +47,8 @@ missing=$(ldd /usr/lib/ardia/chrome /usr/lib/ardia/chrome_crashpad_handler | gre
 echo "ok   libraries resolve"
 version=$(/usr/bin/ardia --version) || fail "ardia --version exited $?"
 echo "ok   $version"
+[ "$(stat -c "%a %U" /usr/lib/ardia/chrome-sandbox)" = "4755 root" ] || fail "chrome-sandbox is not setuid root"
+echo "ok   chrome-sandbox is setuid root"
 grep -qx "Exec=/usr/bin/ardia %U" /usr/share/applications/ardia.desktop || fail "the desktop entry does not run /usr/bin/ardia"
 test -f /usr/share/icons/hicolor/256x256/apps/ardia.png || fail "no icon"
 test -f /usr/share/polkit-1/actions/dev.ardia.linux.policy || fail "no polkit policy"
@@ -70,6 +75,17 @@ for image in "${images[@]}"; do
   with_apparmor=0
   [[ "$image" == ubuntu:* ]] && with_apparmor=1
   echo "== $image (AppArmor package: $([ $with_apparmor = 1 ] && echo yes || echo no))"
+  pulled=0
+  for attempt in 1 2 3; do
+    if "$engine" pull -q "$image" >/dev/null; then pulled=1; break; fi
+    echo "pull $image failed (attempt $attempt of 3)"
+    [ "$attempt" = 3 ] || sleep $((attempt * 10))
+  done
+  if [ "$pulled" = 0 ]; then
+    echo "FAIL $image: could not pull it"
+    status=1
+    continue
+  fi
   if ! "$engine" run --rm -e WITH_APPARMOR=$with_apparmor -v "$deb:/pkg/ardia.deb:ro" "$image" bash -c "$check"; then
     echo "FAIL $image"
     status=1

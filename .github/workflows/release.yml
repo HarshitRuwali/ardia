@@ -349,7 +349,17 @@ jobs:
             exit 1
           fi
       - name: Debian package installs
-        run: scripts/linux/deb-install-test.sh "$RUNNER_TEMP/linux/ardia_${VERSION}_amd64.deb"
+        id: deb-install
+        continue-on-error: true
+        run: scripts/linux/deb-install-test.sh "$RUNNER_TEMP/linux/Ardia-$VERSION-linux-x64.deb"
+      - name: Drop the .deb that failed its install test
+        if: steps.deb-install.outcome == 'failure'
+        run: |
+          set -euo pipefail
+          rm -f "$RUNNER_TEMP/linux/Ardia-$VERSION-linux-x64.deb" "$RUNNER_TEMP/linux/Ardia-$VERSION-linux-x64.deb.sha256"
+          echo "deb dropped: it failed scripts/linux/deb-install-test.sh in run $GITHUB_RUN_ID" >> "$RUNNER_TEMP/linux/provenance.txt"
+          echo "::warning::Ardia-$VERSION-linux-x64.deb failed its install test (above), so the release ships without it; the tarball, AppImage, Arch source package and CLI still ship"
+          echo "- Linux: the .deb failed its install test and is left out" >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: linux
@@ -360,8 +370,8 @@ jobs:
             ${{ runner.temp }}/linux/Ardia-${{ inputs.version }}-linux-x64.deb.sha256
             ${{ runner.temp }}/linux/Ardia-${{ inputs.version }}-linux-x64.AppImage
             ${{ runner.temp }}/linux/Ardia-${{ inputs.version }}-linux-x64.AppImage.sha256
-            ${{ runner.temp }}/linux/ardia_${{ inputs.version }}_amd64.deb
-            ${{ runner.temp }}/linux/ardia_${{ inputs.version }}_amd64.deb.sha256
+            ${{ runner.temp }}/linux/ardia-bin-${{ inputs.version }}.src.tar.gz
+            ${{ runner.temp }}/linux/ardia-bin-${{ inputs.version }}.src.tar.gz.sha256
             ${{ runner.temp }}/linux/ardia-cli-${{ inputs.version }}-linux-x64.tar.gz
             ${{ runner.temp }}/linux/ardia-cli-${{ inputs.version }}-linux-x64.tar.gz.sha256
             ${{ runner.temp }}/linux/provenance.txt

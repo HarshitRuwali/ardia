@@ -106,6 +106,10 @@ def normalize_modes(root):
 def package(output, ui, destination, content_blocker=None, version=None, cli=None, deb=None, appimage=None):
     if version is not None:
         check_version(version)
+    if deb is not None:
+        if version is None:
+            raise ValueError('a package with a .deb needs --version')
+        linux_formats.deb_version(version)
     cli_digest = None
     if cli is not None:
         if version is None:
@@ -203,11 +207,13 @@ def main():
     parser.add_argument('--content-blocker', type=pathlib.Path)
     parser.add_argument('--version', help='the Ardia version, written to lib/ardia/VERSION')
     parser.add_argument('--cli', type=pathlib.Path, help=f'the ardia-cli-<version>-{CLI_PLATFORM}.tar.gz to bundle in lib/ardia/cli (needs --version)')
-    parser.add_argument('--deb', type=pathlib.Path, help='also build a .deb at this path (dpkg-deb)')
+    parser.add_argument('--deb', type=pathlib.Path, help='also build a .deb at this path (dpkg-deb and readelf; needs --version)')
     parser.add_argument('--appimage', type=pathlib.Path, help='also build an AppImage at this path (a pinned type 2 runtime and mksquashfs)')
     args = parser.parse_args()
     if args.cli is not None and args.version is None:
         parser.error('--cli needs --version')
+    if args.deb is not None and args.version is None:
+        parser.error('--deb needs --version')
     try:
         blocker = args.content_blocker.resolve() if args.content_blocker else None
         cli = args.cli.resolve() if args.cli else None

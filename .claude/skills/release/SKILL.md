@@ -401,8 +401,9 @@ writes `/Applications/Ardia.app`): `brew audit --cask --online ardia-browser/tap
 
 The Release workflow builds it in its `linux` job (`scripts/linux/release.sh <version> --engine exact`, smoke gate
 included, then the `.deb` installed and purged on Debian 13 and Ubuntu 24.04), and `publish.sh` attaches
-`Ardia-<version>-linux-x64.tar.xz`, `ardia_<version>_amd64.deb`, `ardia-cli-<version>-linux-x64.tar.gz` and their
-`.sha256` files to the release, nightly or stable. That needs the Linux engine for the release commit's engine
+`Ardia-<version>-linux-x64.tar.xz`, `.deb` and `.AppImage`, `ardia-bin-<version>.src.tar.gz` (the Arch PKGBUILD),
+`ardia-cli-<version>-linux-x64.tar.gz` and their `.sha256` files to the release, nightly or stable. A `.deb` that
+fails the install test is dropped (`deb dropped` in `provenance.txt`) and the rest still ships. That needs the Linux engine for the release commit's engine
 key (`engine/engine-key.sh`) published in ardia-browser/ardia. Without it the `linux` job fails, the Mac release
 still ships, and `publish` warns that Linux was skipped. After a stable release the `aur` job moves the AUR package
 `ardia-bin` to it (`scripts/linux/arch/publish-aur.sh`) when the `AUR_SSH_PRIVATE_KEY` secret is set; a dry run, or a
