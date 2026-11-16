@@ -45,10 +45,10 @@ apt-get install -y -qq /pkg/ardia.deb >/tmp/install.log 2>&1 || { cat /tmp/insta
 missing=$(ldd /usr/lib/ardia/chrome /usr/lib/ardia/chrome_crashpad_handler | grep "not found" || true)
 [ -z "$missing" ] || fail "unresolved libraries: $missing"
 echo "ok   libraries resolve"
-version=$(/usr/bin/ardia --version) || fail "ardia --version exited $?"
-echo "ok   $version"
 [ "$(stat -c "%a %U" /usr/lib/ardia/chrome-sandbox)" = "4755 root" ] || fail "chrome-sandbox is not setuid root"
 echo "ok   chrome-sandbox is setuid root"
+version=$(/usr/bin/ardia --version) || fail "ardia --version exited $?"
+echo "ok   $version"
 grep -qx "Exec=/usr/bin/ardia %U" /usr/share/applications/ardia.desktop || fail "the desktop entry does not run /usr/bin/ardia"
 test -f /usr/share/icons/hicolor/256x256/apps/ardia.png || fail "no icon"
 test -f /usr/share/polkit-1/actions/dev.ardia.linux.policy || fail "no polkit policy"
