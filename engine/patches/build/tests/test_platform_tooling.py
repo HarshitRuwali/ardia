@@ -559,7 +559,12 @@ class PackagingTests(unittest.TestCase):
             self.assertIn('rm -f /etc/apparmor.d/ardia', (scripts / 'postrm').read_text())
             self.assertIn('update-alternatives --install "/usr/bin/$name" "$name" /usr/bin/ardia 100', postinst)
             self.assertIn('for name in x-www-browser gnome-www-browser', postinst)
-            self.assertIn('update-alternatives --remove "$name" /usr/bin/ardia', (scripts / 'prerm').read_text())
+            prerm = (scripts / 'prerm').read_text()
+            self.assertIn('update-alternatives --remove "$name" /usr/bin/ardia', prerm)
+            self.assertIn('if [ "$1" = remove ]; then', prerm)
+            self.assertNotIn('deconfigure', prerm)
+            for rollback in ('abort-remove', 'abort-deconfigure', 'abort-upgrade'):
+                self.assertIn(f'[ "$1" = {rollback} ]', postinst)
             fields = subprocess.run(['dpkg-deb', '-f', str(deb), 'Depends', 'Provides'], capture_output=True, text=True, check=True).stdout
             self.assertIn('Provides: www-browser', fields)
             for package in ('libc6 (>= 2.17)', 'libgtk-3-0t64 | libgtk-3-0', 'libsecret-1-0', 'xdg-utils', 'curl'):

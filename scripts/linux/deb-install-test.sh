@@ -5,7 +5,7 @@ usage='usage: scripts/linux/deb-install-test.sh <Ardia-<version>-linux-x64.deb> 
 Installs the .deb with apt in fresh containers (docker or podman) and checks
 that its dependencies resolve, every library chrome needs is found, chrome
 --version runs, chrome-sandbox is setuid root, ardia is an x-www-browser
-alternative, curl is there for the bundled CLI installer, the AppArmor profile
+alternative that survives a rolled-back deconfigure or remove, curl is there for the bundled CLI installer, the AppArmor profile
 is written only where AppArmor reads the 4.0 ABI, and apt purge leaves the file
 system as it was before the install. The images default to debian:13 and
 ubuntu:24.04; ubuntu:24.04 also gets the apparmor package first, so its run
@@ -57,6 +57,15 @@ update-alternatives --query x-www-browser | grep -qx "Alternative: /usr/bin/ardi
 update-alternatives --query gnome-www-browser | grep -qx "Alternative: /usr/bin/ardia" || fail "ardia is not a gnome-www-browser alternative"
 command -v curl >/dev/null || fail "no curl, which the bundled CLI installer needs"
 echo "ok   x-www-browser and gnome-www-browser alternatives, curl"
+update-alternatives --set x-www-browser /usr/bin/ardia >/dev/null
+/var/lib/dpkg/info/ardia.prerm deconfigure in-favour other 1.0
+/var/lib/dpkg/info/ardia.postinst abort-deconfigure in-favour other 1.0
+update-alternatives --query x-www-browser | grep -qx "Status: manual" || fail "a rolled-back deconfigure lost the manual x-www-browser choice"
+update-alternatives --query x-www-browser | grep -qx "Value: /usr/bin/ardia" || fail "a rolled-back deconfigure moved x-www-browser off ardia"
+/var/lib/dpkg/info/ardia.prerm remove
+/var/lib/dpkg/info/ardia.postinst abort-remove
+update-alternatives --query gnome-www-browser | grep -qx "Alternative: /usr/bin/ardia" || fail "a rolled-back remove left ardia without its alternatives"
+echo "ok   alternatives survive a rolled-back deconfigure and remove"
 if [ -e /etc/apparmor.d/abi/4.0 ]; then
   grep -q "profile ardia /usr/lib/ardia/chrome " /etc/apparmor.d/ardia || fail "no AppArmor profile for /usr/lib/ardia/chrome"
   echo "ok   AppArmor profile installed"

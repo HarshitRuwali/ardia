@@ -628,8 +628,9 @@ command ([linux-ci.md](linux-ci.md) › Linux releases).
     dependency can't ship unnoticed. polkit and Vulkan are `Recommends`;
   - it `Provides: www-browser`; `postinst` makes `chrome-sandbox` setuid root, copies the AppArmor profile to
     `/etc/apparmor.d/ardia` and loads it where `/etc/apparmor.d/abi/4.0` exists, as `install.sh` does, and registers
-    `/usr/bin/ardia` as the `x-www-browser` and `gnome-www-browser` alternative (priority 100); `prerm` unregisters
-    it, and `postrm` unloads and deletes the profile (and its cache) on remove and purge.
+    `/usr/bin/ardia` as the `x-www-browser` and `gnome-www-browser` alternative (priority 100), also on dpkg's
+    `abort-remove`, `abort-deconfigure` and `abort-upgrade` rollbacks; `prerm` unregisters it only on `remove`, so a
+    deconfigure that dpkg rolls back keeps an admin's choice, and `postrm` unloads and deletes the profile (and its cache) on remove and purge.
 
   `scripts/linux/deb-install-test.sh <deb>` installs it with apt in `debian:13` and `ubuntu:24.04` containers (Ubuntu
   with the apparmor package): the dependencies resolve, `ldd` finds every library, `ardia --version` runs,
