@@ -1,4 +1,4 @@
-import type { WindowButtonStyle, WindowChrome } from "./platformChrome";
+import type { PopUpChrome, WindowButtonStyle, WindowChrome } from "./platformChrome";
 import { WINDOW_CHROME as WINDOWS_CHROME } from "./platformChrome.windows";
 
 export const NATIVE_BUTTONS_CHROME: WindowChrome = { ...WINDOWS_CHROME };
@@ -15,3 +15,5 @@ export function applyWindowButtonStyle(style: WindowButtonStyle): boolean {
   Object.assign(WINDOW_CHROME, next);
   return true;
 }
+
+export const POP_UP_CHROME: PopUpChrome = { indicator: "accentUpDown", growsToItsTitle: false };
