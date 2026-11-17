@@ -106,7 +106,7 @@ package job red after almost every merge.
      and esbuild downloads are cached;
   5. prepares uBlock Origin with `scripts/linux/fetch-ubo.sh` (cached);
   6. runs `scripts/linux/package.py --out <engine> --version <version> --cli <CLI tarball> --deb <path> --appimage
-     <path>`;
+     <path>`, which seeds the packaged uBlock Origin by running the staged `chrome` once (`scripts/linux/ubo-seed.mjs`);
   7. runs the smoke gate on the tarball, the `.deb` and the AppImage, with `--allow-old-engine` when the engine is a
      nearest one;
   8. installs the `.deb` with `scripts/linux/deb-install-test.sh` in Debian 13 and Ubuntu 24.04 containers
