@@ -6,6 +6,8 @@ import { closeFromWindowControls, minimizeWindow, toggleWindowMaximized } from "
 import { useBrowser } from "../../browser/src/state/browser/store";
 import { useFullscreenTab } from "../../browser/src/state/tabs/pageState";
 import { useWindowButtonStyle } from "../../browser/src/state/windows/windowButtons";
+import { useWindowFullScreen } from "../../browser/src/state/browser/hooks";
+import { trafficLightsShown } from "./windowControlsRules";
 
 const controls = [
   { light: "close", label: "Close window", press: closeFromWindowControls },
@@ -15,10 +17,11 @@ const controls = [
 
 export function TrafficLights({ windowId }: { windowId: string }) {
   const place = useTrafficLightsPlace();
-  const fullscreen = useFullscreenTab(windowId);
+  const pageFullScreen = !!useFullscreenTab(windowId);
+  const windowFullScreen = useWindowFullScreen(windowId);
   const theme = useBrowser((state) => state.ui.appDark ? "dark" : "light");
   const style = useWindowButtonStyle();
-  if (fullscreen || style !== "trafficLights") return null;
+  if (!trafficLightsShown({ style, pageFullScreen, windowFullScreen })) return null;
   return (
     <div className="ardia-traffic-lights" aria-label="Window controls" role="group" onContextMenu={(e) => {
       if (!linuxWindowMenu || isLinuxUtility(windowId)) return;

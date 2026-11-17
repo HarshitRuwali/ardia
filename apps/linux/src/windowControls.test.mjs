@@ -18,6 +18,15 @@ test("Linux lays out its window with the Windows build's chrome until Traffic li
   assert.deepEqual(linux, windowsChrome);
 });
 
+test("the traffic lights show only when chosen, and hide while the window or a page is full screen, as the Mac's do", async () => {
+  const { trafficLightsShown } = await import("./windowControlsRules.ts");
+  const shown = (style, pageFullScreen = false, windowFullScreen = false) => trafficLightsShown({ style, pageFullScreen, windowFullScreen });
+  assert.equal(shown("trafficLights"), true);
+  assert.equal(shown("native"), false);
+  assert.equal(shown("trafficLights", true), false);
+  assert.equal(shown("trafficLights", false, true), false);
+});
+
 test("with the traffic lights every layout keeps the header's hamburger, never collapses the header and keeps Downloads in it", async () => {
   const { menuBesideWindowButtons, linuxSidebarCaptionRoom, linuxSidebarHeaderCollapsed, linuxDownloadsInSidebarFooter, headerFitsDownloads, addressBarInSidebar } = await import("./sidebarHeaderLayout.ts");
   const { TRAFFIC_LIGHTS_CHROME } = await import("../../browser/src/lib/platformChrome.linux.ts");
