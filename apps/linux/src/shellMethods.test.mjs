@@ -479,7 +479,7 @@ test("an engine with only the native left-edge watcher keeps it for a left sideb
 });
 
 test("the traffic lights follow a sidebar on the right: a trailing center is measured from the window's right edge, as the Mac anchors them", async () => {
-  const lights = () => [0, 1, 2].map((index) => trafficLightPosition(trafficLightsPlace(), index));
+  const lights = () => [0, 1, 2].map((index) => trafficLightPosition(trafficLightsPlace("main"), index));
   assert.match(read("./shims/shellBase.tsx"), /setTrafficLightsCenter: async \(id: string, center: \[number, number\] \| null, trailing = false\) => setTrafficLightsCenter\(id, center, trailing\)/);
   await setTrafficLightsCenter("main", [215, 30], true);
   assert.deepEqual(lights(), [{ right: 208, top: 23 }, { right: 185, top: 23 }, { right: 162, top: 23 }]);
@@ -487,6 +487,15 @@ test("the traffic lights follow a sidebar on the right: a trailing center is mea
   assert.deepEqual(lights(), [{ left: 18, top: 23 }, { left: 41, top: 23 }, { left: 64, top: 23 }]);
   await setTrafficLightsCenter("main", null, true);
   assert.deepEqual(lights()[0], { left: 18, top: 20 });
+});
+
+test("each window's traffic lights keep their own place when shared code places another window's, as every Linux window syncs them all", async () => {
+  await setTrafficLightsCenter("main", [25, 30]);
+  await setTrafficLightsCenter("w-small", [20, 19]);
+  assert.deepEqual(trafficLightPosition(trafficLightsPlace("main"), 0), { left: 18, top: 23 });
+  assert.deepEqual(trafficLightPosition(trafficLightsPlace("w-small"), 0), { left: 13, top: 12 });
+  await setTrafficLightsCenter("w-small", null);
+  assert.deepEqual(trafficLightPosition(trafficLightsPlace("main"), 0), { left: 18, top: 23 });
 });
 
 test("on an engine without the native capture, a tab drag captures a bare Escape in the shell as dragEscape and releases it when the drag ends", async () => {

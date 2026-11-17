@@ -20,15 +20,16 @@ const ART = {
 } as const;
 
 type Light = keyof (typeof ART)["light"];
-const LIGHTS: Light[] = ["close", "minimize", "zoom"];
 
 export type TrafficLightsPlace = { center: readonly [number, number]; trailing: boolean };
 
-let place: TrafficLightsPlace = { center: DEFAULT_CENTER, trailing: false };
+const DEFAULT_PLACE: TrafficLightsPlace = { center: DEFAULT_CENTER, trailing: false };
+const places = new Map<string, TrafficLightsPlace>();
 const watchers = new Set<() => void>();
 
-export function setTrafficLightsCenter(_windowId: string, next: readonly [number, number] | null, trailing = false) {
-  place = next ? { center: [next[0], next[1]], trailing } : { center: DEFAULT_CENTER, trailing: false };
+export function setTrafficLightsCenter(windowId: string, next: readonly [number, number] | null, trailing = false) {
+  if (next) places.set(windowId, { center: [next[0], next[1]], trailing });
+  else places.delete(windowId);
   for (const watcher of watchers) watcher();
   return Promise.resolve();
 }
@@ -61,8 +62,8 @@ export function TrafficLight({ name, theme }: { name: Light; theme: keyof typeof
   );
 }
 
-export const trafficLightsPlace = () => place;
+export const trafficLightsPlace = (windowId: string) => places.get(windowId) ?? DEFAULT_PLACE;
 
-export function useTrafficLightsPlace() {
-  return useSyncExternalStore((watch) => (watchers.add(watch), () => void watchers.delete(watch)), trafficLightsPlace);
+export function useTrafficLightsPlace(windowId: string) {
+  return useSyncExternalStore((watch) => (watchers.add(watch), () => void watchers.delete(watch)), () => trafficLightsPlace(windowId));
 }

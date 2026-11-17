@@ -16,7 +16,7 @@ const controls = [
 ] as const;
 
 export function TrafficLights({ windowId }: { windowId: string }) {
-  const place = useTrafficLightsPlace();
+  const place = useTrafficLightsPlace(windowId);
   const pageFullScreen = !!useFullscreenTab(windowId);
   const windowFullScreen = useWindowFullScreen(windowId);
   const theme = useBrowser((state) => state.ui.appDark ? "dark" : "light");
