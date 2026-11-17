@@ -177,8 +177,8 @@ const shortcuts = [
   ["⌃⇧⇟", K(F(0xf72d), 121, "control", "shift", "function"), { command: "moveTabDown" }, "(Chrome's)"],
   ["⌃⇧⇞", K(F(0xf72c), 116, "control", "shift", "function"), { command: "moveTabUp" }, "(Chrome's)"],
   ["⇧⌘A", cmd("A", 0, "shift"), { command: "searchTabs" }, "⇧⌘A"],
-  ["⌃Tab", K("\t", 48, "control"), { command: "tabSwitcher", arg: "forward" }, "⌃Tab"],
-  ["⌃⇧Tab", K("\u0019", 48, "control", "shift"), { command: "tabSwitcher", arg: "backward" }, "⌃⇧Tab"],
+  ["⌃Tab", K("\t", 48, "control"), { command: "nextTab" }, "⌃Tab"],
+  ["⌃⇧Tab", K("\u0019", 48, "control", "shift"), { command: "previousTab" }, "⌃⇧Tab"],
   ["⌘↩", cmd("\r", 36), { command: "returnToPinnedUrl" }, "⌘↩", "not-field"],
   ...[1, 2, 3, 4, 5, 6, 7, 8].map((n) => [`⌘${n}`, cmd(`${n}`, [18, 19, 20, 21, 23, 22, 26, 28][n - 1]), { command: "selectTab", arg: `${n}` }, `⌘${n} (Chromium)`]),
   ["⌘9", cmd("9", 25), { command: "selectLastTab" }, "⌘9 (Chromium)"],
@@ -490,6 +490,26 @@ for (const busy of [0, 120]) {
       `bar "${bar}", page "${inPage}"`);
   }
 }
+for (const mode of ["page", "commandBar"]) {
+  await ac(`ac.store.getState().updateSettings({ newTabOpens: ${JSON.stringify(mode)} }); return 1;`);
+  for (const busy of mode === "page" ? [450, 700, 1200] : [450]) {
+    for (const gap of [50, 600]) {
+      await resetToPageField("", [0, 0]);
+      await busyJsOnce(busy);
+      const typed = [["q", 12], ["w", 13], ["e", 14]].map(([k, code], i) => keyPress(k, code, i ? 15 : gap, []));
+      await postKeys([keyPress("t", 17), ...typed]);
+      await sleep(busy + 1500);
+      const bar = (await devWindow("ax")).split("\n").find((l) => /AXTextField/.test(l))?.trim().replace(/^AXTextField:? ?/, "") ?? "";
+      const inPage = await pageField("f.value");
+      const trace = await ac(`return globalThis.expo.modules.ArdiaDev.devFocusHandoffTrace();`);
+      const began = trace.findLastIndex((l) => / begin /.test(l));
+      const dropped = began < 0 || trace.slice(began).some((l) => / drop /.test(l));
+      check(`⌘T then typing at +${gap} ms, JS busy ${busy} ms, New tab opens ${mode}: the letters land in the box, in order, with no beep`,
+        bar === "qwe" && inPage === "" && !dropped, `box "${bar}", page "${inPage}", dropped or no gate ${dropped}`);
+    }
+  }
+}
+await ac(`ac.store.getState().updateSettings({ newTabOpens: "page" }); return 1;`);
 {
   await resetToPageField("", [0, 0]);
   await clipboard.set("ordered");
@@ -774,6 +794,9 @@ await sleep(1000);
         `${harness}listener ${ready}, first responder ${tab.firstResponder}, Tab → ${afterTab} (${describe(tab)}), ⇧Tab → ${afterBackTab} (${describe(backTab)}), field ${JSON.stringify(typed)}`);
     }
 
+    const SWITCHER_KEYS = { "tabSwitcher:forward": ["\t", "control"], "tabSwitcher:backward": ["\t", "control", "shift"] };
+    await ac(`const s = ac.store.getState(); s.updateSettings({ shortcuts: { ...(s.settings.shortcuts ?? {}), ...${JSON.stringify(SWITCHER_KEYS)} } }); return 1;`);
+    await sleep(500);
     await ac(`globalThis.wkSwitcher = []; globalThis.wkSwitcherStop?.();
       globalThis.wkSwitcherStop = ac.sidebarRows.useSidebarUi.subscribe((u) => { const sw = u.switcher, last = globalThis.wkSwitcher.at(-1);
         if (sw && sw.index !== last?.index) globalThis.wkSwitcher.push({ index: sw.index, ids: sw.ids }); }); return 1;`);
@@ -872,7 +895,7 @@ await sleep(1000);
     {
       const backTab = K("\u0019", 48, "control", "shift"), rebound = K("\u0019", 48, "control", "option", "shift");
       const bind = (binding) => ac(`const s = ac.store.getState(), { ["tabSwitcher:backward"]: _, ...rest } = s.settings.shortcuts ?? {};
-        s.updateSettings({ shortcuts: ${binding ? `{ ...rest, "tabSwitcher:backward": ${JSON.stringify(binding)} }` : "rest"} }); return 1;`);
+        s.updateSettings({ shortcuts: { ...rest, "tabSwitcher:backward": ${JSON.stringify(binding ?? SWITCHER_KEYS["tabSwitcher:backward"])} } }); return 1;`);
       const waitReserved = async (key, want) => {
         let by = "";
         for (let i = 0; i < 30; i++) {
@@ -893,11 +916,13 @@ await sleep(1000);
       const restored = await waitReserved(backTab, true);
       const opened = (r) => (r.fired ?? []).some((f) => f.command === "tabSwitcher" && f.arg === "backward");
       const harness = notKey(viaNew, viaOld);
-      check("Tab Switcher (backward) rebound to ⌃⌥⇧Tab: the new keys open it backwards through AppKit and ⌃⇧Tab no longer does; removing the binding brings ⌃⇧Tab back",
-        !harness && newBy === "ardia.command.tabSwitcher" && !oldBy && opened(viaNew) && !opened(viaOld) && restored === "ardia.command.tabSwitcher",
+      check("Tab Switcher (backward) rebound from ⌃⇧Tab to ⌃⌥⇧Tab: the new keys open it backwards through AppKit and ⌃⇧Tab no longer does; binding ⌃⇧Tab again brings it back",
+        !harness && newBy === "ardia.command.tabSwitcher" && oldBy !== "ardia.command.tabSwitcher" && opened(viaNew) && !opened(viaOld) && restored === "ardia.command.tabSwitcher",
         `${harness}⌃⌥⇧Tab ${newBy || "not reserved"} (${describe(viaNew)}), ⌃⇧Tab ${oldBy || "not reserved"} (${describe(viaOld)}), restored ${restored || "no"}`);
     }
-    await ac(`globalThis.wkSwitcherStop?.(); globalThis.wkSwitcherStop = null; return 1;`);
+    await ac(`globalThis.wkSwitcherStop?.(); globalThis.wkSwitcherStop = null;
+      const s = ac.store.getState(), { ["tabSwitcher:forward"]: _f, ["tabSwitcher:backward"]: _b, ...rest } = s.settings.shortcuts ?? {};
+      s.updateSettings({ shortcuts: rest }); return 1;`);
 
     {
       const sidebar = () => ac(`return !ac.store.getState().settings.autoHideTabs;`);

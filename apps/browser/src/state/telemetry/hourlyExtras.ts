@@ -1,5 +1,6 @@
 import { capture as send } from "./client";
 import { takeDownloadsPanelCauses } from "./downloadsPanelCauses";
+import { takeEditKeyAckCounts } from "./editKeyAcks";
 import { takeExportCounts } from "./exportCounts";
 import { takeDialogPageCounts } from "./dialogPageCounts";
 import { takeExternalAppCounts } from "./externalAppCounts";
@@ -12,13 +13,15 @@ import { takeMemoryTrimCounts } from "./memoryTrimCounts";
 import { takePagerCounts } from "./pagerCounts";
 import { takePlatformCounts, watchPlatformCounts } from "./platformCounts";
 import { takeProfileDataCounts } from "./profileDataCounts";
+import { takeQuitWarningCounts } from "./quitWarningCounts";
+import { takeSwipeHistoryListCounts } from "./swipeHistoryListCounts";
 import { takeSyncFileCounts } from "./syncFileCounts";
 
 export { watchPlatformCounts };
 
 export const USAGE_COUNTS_EVENT = "usage_counts";
 
-export const takeHourlyExtras = () => ({ ...takePlatformCounts(), ...takeImportRuns(), ...takeProfileDataCounts(), ...takeExportCounts(), ...takeInlineCompletionCounts(), ...takeFirstRunCounts(), ...takeMemoryTrimCounts(), ...takeDownloadsPanelCauses(), ...takeExternalAppCounts(), ...takeDialogPageCounts(), ...takeFindCounts(), ...takeSyncFileCounts(), ...takeKeyboardFollowCounts(), ...takePagerCounts() });
+export const takeHourlyExtras = () => ({ ...takePlatformCounts(), ...takeImportRuns(), ...takeProfileDataCounts(), ...takeExportCounts(), ...takeInlineCompletionCounts(), ...takeFirstRunCounts(), ...takeMemoryTrimCounts(), ...takeDownloadsPanelCauses(), ...takeExternalAppCounts(), ...takeDialogPageCounts(), ...takeFindCounts(), ...takeSyncFileCounts(), ...takeKeyboardFollowCounts(), ...takePagerCounts(), ...takeSwipeHistoryListCounts(), ...takeEditKeyAckCounts(), ...takeQuitWarningCounts() });
 
 type Send = typeof send;
 
