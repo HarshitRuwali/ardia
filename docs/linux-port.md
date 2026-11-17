@@ -653,9 +653,21 @@ pnpm --filter @ardia/linux acceptance -- <extracted>/ardia/bin/ardia
 - **Window controls.** Linux uses the Windows build's caption buttons on the right: `…`, minimize, maximize (restore
   while maximized) and close, drawn by the shared `WindowControls.tsx` in the places Windows puts them (the toolbar
   row, the end of the top strip, a right sidebar's header, atop a left sidebar with the address bar in it, Little
-  Ardia's bar, Settings and Import). There are no traffic lights. They work on decorationless desktops such as
-  Hyprland; Chrome's own caption buttons are hidden: opacity 0, no input, ignored by accessibility.
-  - `lib/platformChrome.linux.ts` takes the Windows `WINDOW_CHROME`. `platform/windowControls.ts` is swapped for
+  Ardia's bar, Settings and Import). They work on decorationless desktops such as Hyprland; Chrome's own caption
+  buttons are hidden: opacity 0, no input, ignored by accessibility.
+  - **Traffic lights.** Settings › Appearance › Window buttons (`windowButtons`: `native` by default, or
+    `trafficLights`; kept on this device, in the config file and in the daily settings snapshot) brings back the
+    Mac's lights at the top left instead, with the Mac's layouts: no `…` (the hamburger stays in the header), the
+    sidebar header's tools after the lights, and nothing kept clear at the top right. `lib/platformChrome.linux.ts`
+    holds both chromes and `applyWindowButtonStyle` swaps the one `WINDOW_CHROME` object in place;
+    `state/windows/windowButtons.ts` applies it after hydrate and on every store change, subscribed before anything
+    renders, so every window, Settings included, switches at once without a relaunch. Shared code reads the chrome
+    when it is used (`useControlsShown`, `profileIndicatorX()`, `HEADER_TOOLS.toggleX`, `layout.trafficLightsWidth`,
+    Little Ardia's bar), and the components that read it subscribe to the setting. `TrafficLights.tsx` draws the
+    lights where shared code places them (`setTrafficLightsCenter` in `shims/web/windowChrome.tsx`) and presses them
+    through the same `captionControls.ts` as the native buttons; right-clicking them opens the window menu. The Mac
+    and Windows offer no choice and hide the row.
+  - `lib/platformChrome.linux.ts` starts from the Windows `WINDOW_CHROME`. `platform/windowControls.ts` is swapped for
     `hostWindowControls.ts`: minimize and maximize call `ArdiaShell.minimizeWindow` and `toggleMaximizeWindow`, and
     caption regions are a no-op because the shell's own drag regions move the window. Close goes straight to the
     shell's close coordinator (`captionControls.ts`, swapped in for `WindowControls.tsx`'s close), so a window with
@@ -683,7 +695,8 @@ pnpm --filter @ardia/linux acceptance -- <extracted>/ardia/bin/ardia
 - **Outer frame.** The host overlays Chromium's client view and doesn't replace its frame. Without the Wayland
   decoration protocol, Chromium draws its custom frame.
 - **Menu button.** Linux has no global menu bar, so a menu button stands in for the Mac one: usually the `…` beside the
-  window buttons, and a hamburger in the header only while they're hidden (Window controls above). It lists Ardia,
+  window buttons, and a hamburger in the header while they're hidden or the traffic lights are chosen (Window controls
+  above). It lists Ardia,
   File, Edit, View, Tabs, Bookmarks, History, Extensions, Window and Help as submenus built from the same menu
   state the Mac menu bar uses (checks, disabled commands, dynamic titles, bookmarks, recently closed entries, profiles
   and extensions), labelled with the effective Linux shortcuts (`apps/linux/src/appMenu.ts`). Items run through the
@@ -788,8 +801,8 @@ pnpm --filter @ardia/linux acceptance -- <extracted>/ardia/bin/ardia
   page overlay region (`TopStripPeekRegion.tsx`, swapped in for `App.tsx`'s import), so the host gives the shell the
   pointer where they cover a page: 2 px of the panel with the default toolbar, 15 px with the compact one. While the strip
   is hidden the window buttons and the `…` sit at the end of the toolbar row, as on Windows.
-- **Header.** The menu button shows here whenever the window buttons are hidden (full screen); otherwise it is the
-  `…` beside them. The profile name beside it follows the Mac's rule
+- **Header.** The menu button shows here whenever the window buttons are hidden (full screen) or the traffic lights
+  are chosen; otherwise it is the `…` beside them. The profile name beside it follows the Mac's rule
   (`ProfileIndicator.tsx`): only in an Incognito window or with two or more profiles, cut when at least 52 px of it
   fit, a person icon below that, and nothing when not even the icon fits (a 190 px sidebar with the Downloads button).
 - **Materials.** `VisualEffect`, `GlassEffect`, popover bubbles and the window's vibrancy take light or dark from the

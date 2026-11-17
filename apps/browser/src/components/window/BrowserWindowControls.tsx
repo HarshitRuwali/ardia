@@ -7,10 +7,10 @@ import { WINDOW_CONTROLS } from "../../lib/windowChrome";
 import { TintInk } from "../ui/TintInk";
 import { useSitePalette } from "../toolbar/useSitePalette";
 import { usePaneChrome } from "../toolbar/WindowToolbar";
-import { controlsShown, WindowControls } from "./WindowControls";
+import { useControlsShown, WindowControls } from "./WindowControls";
 
 export function BrowserWindowControls() {
-  return controlsShown ? <PlacedControls /> : null;
+  return useControlsShown() ? <PlacedControls /> : null;
 }
 
 function PlacedControls() {

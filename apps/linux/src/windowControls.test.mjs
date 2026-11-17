@@ -13,9 +13,26 @@ function state(settings = {}, window = {}, extra = {}) {
   };
 }
 
-test("Linux lays out its window with the Windows build's chrome", async () => {
+test("Linux lays out its window with the Windows build's chrome until Traffic lights is chosen", async () => {
   const linux = (await import("../../browser/src/lib/platformChrome.linux.ts")).WINDOW_CHROME;
-  assert.equal(linux, windowsChrome);
+  assert.deepEqual(linux, windowsChrome);
+});
+
+test("with the traffic lights every layout keeps the header's hamburger, never collapses the header and keeps Downloads in it", async () => {
+  const { menuBesideWindowButtons, linuxSidebarCaptionRoom, linuxSidebarHeaderCollapsed, linuxDownloadsInSidebarFooter, headerFitsDownloads, addressBarInSidebar } = await import("./sidebarHeaderLayout.ts");
+  const { TRAFFIC_LIGHTS_CHROME } = await import("../../browser/src/lib/platformChrome.linux.ts");
+  const layouts = [{}, { compactToolbar: true }, { sidebarSide: "right" }, { sidebarSide: "right", sidebarWidth: 160 }, { tabLayout: "top" }, { autoHideTabs: true }, { minimalismMode: true }];
+  for (const settings of layouts) {
+    for (const window of [{}, { fullScreen: true }, { kind: "small" }]) {
+      const s = state(settings, window);
+      const label = JSON.stringify([settings, window]);
+      assert.equal(menuBesideWindowButtons(s, "w", false, TRAFFIC_LIGHTS_CHROME), false, label);
+      assert.equal(linuxSidebarCaptionRoom(s, "w", false, TRAFFIC_LIGHTS_CHROME), 0, label);
+      assert.equal(linuxSidebarHeaderCollapsed(s, "w", false, TRAFFIC_LIGHTS_CHROME), false, label);
+      assert.equal(headerFitsDownloads(s, "w", false, TRAFFIC_LIGHTS_CHROME), true, label);
+    }
+    assert.equal(linuxDownloadsInSidebarFooter(state(settings), "w", false, TRAFFIC_LIGHTS_CHROME), !!addressBarInSidebar(state(settings), "w"), JSON.stringify(settings));
+  }
 });
 
 test("minimize and maximize reach the Linux host's window calls; caption regions are the shell's own drag regions", async () => {

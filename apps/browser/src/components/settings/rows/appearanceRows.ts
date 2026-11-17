@@ -3,6 +3,7 @@ import type { SettingsPane } from "../../../state/settings/settingsWindows";
 import { keyText } from "../../../state/commands/keyText";
 import { PLATFORM_FEATURES } from "../../../lib/platformFeatures";
 import { interfaceScaleAdjustable } from "../../../state/settings/interfaceScale";
+import { windowButtonsChoosable } from "../../../lib/windowChrome";
 
 const inSidebar = (_: unknown, env: SettingsEnv) => !env.top;
 
@@ -55,6 +56,17 @@ export const appearanceRows = {
           description: "Shown in the Dock and the app switcher.",
           keywords: ["dock icon", "logo"],
           shown: () => PLATFORM_FEATURES.appIcon,
+        },
+      },
+    },
+    {
+      section: "Window buttons",
+      rows: {
+        windowButtons: {
+          title: "Window buttons",
+          description: "Native puts minimize, maximize and close at the top right. Traffic lights put close, minimize and maximize at the top left, as on a Mac. Full screen hides both.",
+          keywords: ["window controls", "title bar", "titlebar", "close button", "minimize", "maximize", "traffic lights", "gnome", "kde", "native", "decorations", "linux"],
+          shown: () => windowButtonsChoosable,
         },
       },
     },

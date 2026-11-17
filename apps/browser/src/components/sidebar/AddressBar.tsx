@@ -13,6 +13,7 @@ import { Button, type ButtonHit, FadeLabel, radius, space, ToolbarRowContext, us
 import { TOOLBAR_ROWS } from "../../lib/toolbarRow";
 import { setUrlAnchor, useSidebarCaptionRoom, watchSidebarFieldPlace } from "../../state/windows/layout";
 import { onInterfaceScaleSettled } from "../../state/settings/interfaceScale";
+import { useWindowButtonStyle } from "../../state/windows/windowButtons";
 import { useSidebarPart } from "../../state/sidebar/chrome";
 import { SIDEBAR_FIELD } from "./geometry";
 import { SIDEBAR_TYPE, TAB_ROW } from "./tokens";
@@ -34,6 +35,7 @@ const LIGHTS_Y = ARC_LIGHTS_CENTER[1];
 const PLATE = 32;
 
 export function SidebarHeaderTools({ width }: { width: number }) {
+  useWindowButtonStyle();
   const windowId = useWindowId();
   const tab = useToolbarTab(useActiveTabId());
   const palette = toolbarPalette(useTheme(), null);

@@ -296,3 +296,27 @@ test("the layouts around #1973 keep their window buttons where they were", () =>
     assert.equal(sidebarControlsRow(s, "w", mac), 0, "the Mac's lights keep their own place");
   }
 });
+
+const linux = await import("../../lib/platformChrome.linux.ts");
+const { stripCaptionRoom } = await import("../../components/tabstrip/stripGroups.ts");
+
+test("on Linux with the traffic lights no layout keeps room or a place for drawn window buttons, as on the Mac", () => {
+  for (const [settings, window] of LAYOUTS) {
+    const s = state(settings, window);
+    assert.equal(windowControlsPlace(s, "w", 9, linux.TRAFFIC_LIGHTS_CHROME), null);
+    assert.equal(cardCaptionRoom(s, "w", 9, linux.TRAFFIC_LIGHTS_CHROME), 0);
+    assert.equal(cardTopInset(s, "w", 9, linux.TRAFFIC_LIGHTS_CHROME), 9);
+    assert.equal(sidebarCaptionRoom(s, "w", linux.TRAFFIC_LIGHTS_CHROME), 0);
+  }
+  assert.equal(stripCaptionRoom(false, false, linux.TRAFFIC_LIGHTS_CHROME), 0);
+  assert.deepEqual(littleArdiaBarLayout(linux.TRAFFIC_LIGHTS_CHROME), littleArdiaBarLayout(mac));
+});
+
+test("on Linux with native buttons every layout places them where the Windows build does", () => {
+  for (const [settings, window] of LAYOUTS) {
+    const s = state(settings, window);
+    assert.deepEqual(windowControlsPlace(s, "w", 9, linux.NATIVE_BUTTONS_CHROME), windowControlsPlace(s, "w", 9, windows));
+    assert.equal(sidebarCaptionRoom(s, "w", linux.NATIVE_BUTTONS_CHROME), sidebarCaptionRoom(s, "w", windows));
+  }
+  assert.deepEqual(littleArdiaBarLayout(linux.NATIVE_BUTTONS_CHROME), littleArdiaBarLayout(windows));
+});
