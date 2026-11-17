@@ -63,7 +63,7 @@ export function extensionsProfileId(profileId?: string | null, windowId?: string
 }
 
 export const settingsProfileFor = (pane: SettingsPane, current: SettingsPlace): string | null =>
-  pane === "extensions" ? extensionsProfileId(current.pane === "extensions" ? current.profileId : null) : null;
+  pane === "profiles" ? extensionsProfileId(current.pane === "profiles" ? current.profileId : null) : null;
 
 export const isPrivate = (s: BrowserState, windowId: string) => s.windows[windowId]?.kind === "private";
 

@@ -104,6 +104,7 @@ const LINUX_SHELL_METHODS: Record<string, ShellMethod> = {
   cancelFocusMove: resolved,
   switcherPointerMoved: () => false,
   pressesWithoutRelease: () => 0,
+  takeFocusHandoffCounts: () => ({}),
   pressRepeated: () => Promise.resolve(null),
   animateWindowClose: resolved,
   raiseView,

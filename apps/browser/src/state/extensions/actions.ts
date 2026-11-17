@@ -26,7 +26,7 @@ import { engineProfiles } from "../profiles/engineProfiles";
 import { shownPageId } from "../peek/peek";
 import { isOpenRegularWindow, mainWindowFor, originalProfile } from "../windows/small";
 import { focusedWindowOf } from "../windows/ui";
-import { goToSettingsPane, openSettings, replaceSettingsPlace, settingsBack, useSettingsNav } from "../settings/settingsWindows";
+import { goToSettingsPane, openSettings, replaceSettingsPlace, SETTINGS_DETAIL, useSettingsNav } from "../settings/settingsWindows";
 import { closeSidePanelsOf, toggleSidePanel } from "./sidePanels";
 import { notePrivateWindowExtensionOpen, noteExtensionInstallPromptStale, noteExtensionProfilePageOpen, noteToolbarExtensionMove } from "../telemetry/usage";
 import { extensionPageUrl, extensionProfile, extensionsProfileId, isPrivate, pageProfile, shownIn, useExtensions, windowExtensions, readyTabOf, tabProfile, type Anchor } from "./store";
@@ -250,18 +250,13 @@ export function openOptions(windowId: string, ext: InstalledExtension) {
   focus(regular);
 }
 
-export const openManageExtensions = (windowId?: string | null) => openSettings("extensions", extensionsProfileId(null, windowId));
+export const openManageExtensions = (windowId?: string | null) => openSettings("profiles", extensionsProfileId(null, windowId));
 
 export function openExtensionDetails(profileId: string, extensionId: string) {
   if (useSettingsNav.getState().profileId !== profileId) replaceSettingsPlace(profileId);
-  goToSettingsPane("extensions", profileId, extensionId);
+  goToSettingsPane("profiles", profileId, SETTINGS_DETAIL.extension(extensionId));
 }
 
-export function showExtensionsList(profileId: string) {
-  const prev = useSettingsNav.getState().back.at(-1);
-  if (prev?.pane === "extensions" && !prev.detail && extensionsProfileId(prev.profileId) === profileId) settingsBack();
-  else goToSettingsPane("extensions", profileId);
-}
 export const openPinDialog = (windowId: string) => useExtensions.setState({ pinDialog: { windowId } });
 export const openWebStore = (windowId: string) => openInExtensionProfile(WEB_STORE_HOME, extensionProfile(useBrowser.getState(), windowId), { windowId });
 

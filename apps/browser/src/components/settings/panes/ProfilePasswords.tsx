@@ -20,13 +20,16 @@ import { plural } from "../../../state/browser/model";
 import { importPasswordsCsv, revealPassword, unlockPasswordsFor, usePasswordsUnlocked } from "../../../state/site/savedPasswords";
 import { hostLabel, matchesQuery } from "../../pages/PageLayout";
 import { Favicon } from "../../favicon/Favicon";
-import { Group, ProfilePicker, Row, SectionHeader, useSettingsProfile } from "../Form";
+import { Group, Row, SectionHeader } from "../Form";
 import { keptByExtensionNote } from "../keptByExtension";
 import { settingsLayout } from "../tokens";
-import { autofillToggleAsked, passwordAutofill, setPasswordAutofillFor } from "../../../state/settings/paneData";
+import { autofillEnabled, autofillToggleAsked, passwordAutofill, setAutofillFor, setPasswordAutofillFor } from "../../../state/settings/paneData";
 import { useResource } from "../../../state/settings/resources";
 import { PLATFORM_TERMS } from "../../../lib/platformTerms";
+import { PLATFORM_FEATURES } from "../../../lib/platformFeatures";
 import { closeSettingsSheet, showSettingsSheet } from "../../../state/settings/sheet";
+import { goToSettingsPane, SETTINGS_DETAIL } from "../../../state/settings/settingsWindows";
+import { ProfileSubPage } from "./ProfileSubPage";
 
 function passwordManagerAppsNote() {
   const apps = `1Password, Bitwarden, KeePassXC and Proton Pass extensions connect to their ${PLATFORM_TERMS.computer} apps.`;
@@ -35,9 +38,38 @@ function passwordManagerAppsNote() {
     : `${apps} For 1Password, add Ardia once: in the 1Password app, open Settings › Browser › Add Browser and choose Ardia.`;
 }
 
-export function PasswordsPane({ profileId: initial }: { profileId?: string | null }) {
+export function PasswordsSection({ profileId }: { profileId: string }) {
+  const profile = currentEngineProfile(profileId);
+  const [autofill = true] = useResource(passwordAutofill, profile);
+  const [passwordsAsked] = useResource(autofillToggleAsked, profile, "passwords");
+  const [enabled] = useResource(autofillEnabled, profile);
+  const [addressesAsked] = useResource(autofillToggleAsked, profile, "addresses");
+  const [cardsAsked] = useResource(autofillToggleAsked, profile, "cards");
+  const open = (detail: string) => goToSettingsPane("profiles", profileId, detail);
+
+  return (
+    <>
+      <SectionHeader title="Passwords and autofill" />
+      <Group>
+        <Row anchor="profiles.offerToSavePasswords" description={keptByExtensionNote(autofill, passwordsAsked)}>
+          <Toggle value={autofill} onChange={(v) => setPasswordAutofillFor(profile, v)} />
+        </Row>
+        <Row anchor="profiles.passwords" onPress={() => open(SETTINGS_DETAIL.passwords)} />
+        <Row anchor="profiles.addresses" description={keptByExtensionNote(enabled?.addresses, addressesAsked)}>
+          <Toggle value={enabled?.addresses ?? true} disabled={!enabled} onChange={(v) => setAutofillFor(profile, "addresses", v)} />
+        </Row>
+        <Row anchor="profiles.savedAddresses" onPress={() => open(SETTINGS_DETAIL.addresses)} />
+        <Row anchor="profiles.cards" description={keptByExtensionNote(enabled?.cards, cardsAsked)}>
+          <Toggle value={enabled?.cards ?? true} disabled={!enabled} onChange={(v) => setAutofillFor(profile, "cards", v)} />
+        </Row>
+        <Row anchor="profiles.savedCards" onPress={() => open(SETTINGS_DETAIL.cards)} />
+      </Group>
+    </>
+  );
+}
+
+export function PasswordsPage({ profileId }: { profileId: string }) {
   const theme = useTheme();
-  const [profileId, setProfileId] = useSettingsProfile(initial);
   const [list, setList] = useState<SavedPassword[] | null>(null);
   const [never, setNever] = useState<string[]>([]);
   const [query, setQuery] = useState("");
@@ -45,8 +77,6 @@ export function PasswordsPane({ profileId: initial }: { profileId?: string | nul
   const [exportStatus, setExportStatus] = useState("");
   const profile = currentEngineProfile(profileId);
   const unlocked = usePasswordsUnlocked(profile);
-  const [autofill = true] = useResource(passwordAutofill, profile);
-  const [asked] = useResource(autofillToggleAsked, profile, "passwords");
 
   const load = () => {
     void listPasswords(profile).catch(orWarn<SavedPassword[]>([])).then(setList);
@@ -80,23 +110,25 @@ export function PasswordsPane({ profileId: initial }: { profileId?: string | nul
   const shown = (list ?? []).filter((p) => matchesQuery(query, p.origin, p.username));
 
   return (
-    <View>
+    <ProfileSubPage>
       <SectionHeader
         title="Passwords"
         description={`Saved on this ${PLATFORM_TERMS.computer}, separately for each profile, and encrypted with ${PLATFORM_TERMS.passwordKey}.`}
-        action={<ProfilePicker value={profileId} onChange={setProfileId} />}
       />
       <Group>
-        <Row anchor="passwords.offerToSave" description={keptByExtensionNote(autofill, asked)}>
-          <Toggle value={autofill} onChange={(v) => setPasswordAutofillFor(profile, v)} />
-        </Row>
-        <Row anchor="passwords.importPasswords" description={importStatus || undefined}>
+        <Row title="Import passwords" description={importStatus || "From a CSV exported by Chrome, Safari, Firefox, 1Password, Bitwarden…"}>
           <Button title="Import CSV…" onPress={() => void importCsv()} />
         </Row>
-        <Row anchor="passwords.exportPasswords" description={exportStatus || undefined}>
-          <Button title="Export CSV…" onPress={() => void exportCsv()} />
-        </Row>
-        <Row anchor="passwords.managerApps" description={passwordManagerAppsNote()} />
+        {PLATFORM_FEATURES.exportsBookmarksAndPasswords ? (
+          <Row title="Export passwords" description={exportStatus || "To a CSV file. Anyone who can open the file can read your passwords."}>
+            <Button title="Export CSV…" onPress={() => void exportCsv()} />
+          </Row>
+        ) : null}
+        <Row
+          icon={<Symbol name="questionmark.circle" size={15} color={theme.icon} style={HELP_ICON} />}
+          title="Password manager apps"
+          description={passwordManagerAppsNote()}
+        />
       </Group>
 
       {!unlocked ? (
@@ -112,7 +144,10 @@ export function PasswordsPane({ profileId: initial }: { profileId?: string | nul
         </Box>
       ) : (
         <>
-          <SectionHeader title={list ? plural(list.length, "Saved Password") : "Saved Passwords"} action={<SearchField value={query} onChangeText={setQuery} placeholder="Search" width={200} />} />
+          <SectionHeader
+            title={list ? plural(list.length, "Saved Password") : "Saved Passwords"}
+            action={<SearchField value={query} onChangeText={setQuery} placeholder="Search" width={200} />}
+          />
           <Group>
             {list && shown.length === 0 ? (
               <Row title={query ? "No passwords match" : "No saved passwords"} />
@@ -142,7 +177,7 @@ export function PasswordsPane({ profileId: initial }: { profileId?: string | nul
           )}
         </>
       )}
-    </View>
+    </ProfileSubPage>
   );
 }
 
@@ -206,9 +241,7 @@ function PasswordSheet({ profile, saved, onChanged }: { profile: string; saved: 
               <TextField value={username} onChangeText={setUsername} width={220} />
             ) : (
               <Box row gap="xs" style={CENTER}>
-                <Text selectable>
-                  {saved.username}
-                </Text>
+                <Text selectable>{saved.username}</Text>
                 <Button variant="icon" icon="doc.on.doc" size="m" onPress={() => copyText(saved.username)} tooltip="Copy Username" />
               </Box>
             )}
@@ -257,6 +290,7 @@ function PasswordSheet({ profile, saved, onChanged }: { profile: string; saved: 
   );
 }
 
+const HELP_ICON = { width: 20, height: 20 } as const;
 const LOCKED = { alignItems: "center", marginTop: settingsLayout.emptyTop } as const;
 const LOCK_ICON = { width: 36, height: 36 } as const;
 const SHEET_BODY = { marginTop: space.xl } as const;

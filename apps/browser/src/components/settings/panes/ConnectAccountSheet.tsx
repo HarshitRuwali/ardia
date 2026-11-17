@@ -1,114 +1,20 @@
-import { copyText } from "../../../state/app/system";
-import { focusWindow } from "../../../state/windows/nativeWindow";
 import { useEffect, useState, type ReactNode } from "react";
 import { View } from "react-native";
-import { useShallow } from "zustand/react/shallow";
-import { deleteLiveFolder, manualRefresh, statusText } from "../../../state/live/engine";
+import { copyText } from "../../../state/app/system";
+import { focusWindow } from "../../../state/windows/nativeWindow";
 import { connectGoogleDrive } from "../../../state/live/googleAuth";
-import { isMocked } from "../../../state/live/net";
-import { connectBitbucket, connectConfluence, connectGithub, connectNotion, disconnect, SOURCES, startGithubDeviceFlow, type DeviceFlow } from "../../../state/live/sources";
-import { live, updateConfig, updateFolder, useLive } from "../../../state/live/store";
-import type { LiveAccount, LiveFolder, LiveSourceId } from "../../../state/live/types";
-import { useProfileRecords } from "../../../state/profiles/hooks";
+import { connectBitbucket, connectConfluence, connectGithub, connectNotion, SOURCES, startGithubDeviceFlow, type DeviceFlow } from "../../../state/live/sources";
+import { live, updateConfig } from "../../../state/live/store";
+import type { LiveSourceId } from "../../../state/live/types";
 import { openUrlFromSettings, settingsBrowserWindow } from "../../../state/settings/settingsWindows";
-import { Box, Button, DialogActions, DialogTitle, Divider, proseLineHeight, Sheet, space, Text, TextField, Toggle } from "../../ui";
-import { Favicon } from "../../favicon/Favicon";
-import { FormField, Group, Row, SectionHeader } from "../Form";
-import { setting, type SettingId } from "../settingsIndex";
-import { closeSettingsSheet, showSettingsSheet } from "../../../state/settings/sheet";
-import { settingsType } from "../tokens";
+import { closeSettingsSheet } from "../../../state/settings/sheet";
+import { Button, DialogActions, DialogTitle, Divider, proseLineHeight, Sheet, space, Text, TextField } from "../../ui";
 import { perLook } from "../../ui/tokens";
+import { Favicon } from "../../favicon/Favicon";
+import { FormField } from "../Form";
+import { settingsType } from "../tokens";
 
-export function LiveFoldersPane() {
-  const folders = useLive(useShallow((s) => s.folderOrder.map((id) => s.folders[id]!).filter(Boolean)));
-  const profiles = useProfileRecords();
-  useLive((s) => s.status);
-  useLive((s) => s.hidden);
-  const firstPullRequests = folders.find((f) => f.kind === "pullRequests")?.id;
-  return (
-    <View>
-      <SectionHeader anchor="liveFolders.folders" />
-      <Box gap="xl">
-        {folders.map((f) => (
-          <FolderGroup key={f.id} folder={f} profileName={profiles[f.profileId]?.name ?? "Profile"} searchable={f.id === firstPullRequests} />
-        ))}
-      </Box>
-
-      <SectionHeader title="Pull Requests" />
-      <Group>
-        <SourceRow id="github" />
-        <SourceRow id="bitbucket" />
-      </Group>
-
-      <SectionHeader title="Documents" />
-      <Group>
-        <SourceRow id="notion" />
-        <SourceRow id="confluence" />
-        <SourceRow id="gdrive" />
-      </Group>
-      {isMocked ? (
-        <Text size="caption" tone="warning" style={NOTE_TOP}>
-          Development build: services are served by ARDIA_TEST liveMock.
-        </Text>
-      ) : null}
-    </View>
-  );
-}
-
-function FolderGroup({ folder, profileName, searchable }: { folder: LiveFolder; profileName: string; searchable: boolean }) {
-  return (
-    <Group>
-      <Row title={folder.name} description={`${profileName} · ${folder.sources.map((s) => SOURCES[s].name).join(", ")} · ${statusText(folder.id)}`}>
-        <Box row gap="s">
-          <Button title="Refresh" onPress={() => void manualRefresh(folder.id)} />
-          <Button title="Delete" kind="destructive" onPress={() => deleteLiveFolder(folder.id)} />
-        </Box>
-      </Row>
-      {folder.kind === "pullRequests"
-        ? [
-            <FolderOption key="stacks" id="liveFolders.groupStacks" searchable={searchable} value={folder.groupStacks} onChange={(v) => updateFolder(folder.id, { groupStacks: v })} />,
-            <FolderOption key="completed" id="liveFolders.showCompleted" searchable={searchable} value={folder.showCompleted} onChange={(v) => updateFolder(folder.id, { showCompleted: v })} />,
-          ]
-        : null}
-    </Group>
-  );
-}
-
-function FolderOption({ id, searchable, value, onChange }: { id: SettingId; searchable: boolean; value: boolean; onChange(value: boolean): void }) {
-  const { title, description } = setting(id);
-  return (
-    <Row anchor={searchable ? id : undefined} title={title} description={description}>
-      <Toggle value={value} onChange={onChange} />
-    </Row>
-  );
-}
-
-function connectedAs(id: LiveSourceId, account: LiveAccount): string {
-  if (!account.name || account.name === account.login) return account.login;
-  return id === "github" || id === "gdrive" ? `${account.name} (${account.login})` : account.name;
-}
-
-function SourceRow({ id }: { id: LiveSourceId }) {
-  const account = useLive((s) => s.accounts[id]);
-  const source = SOURCES[id];
-  return (
-    <Row
-      anchor={`liveFolders.${id}`}
-      icon={<Favicon url={source.site} size={18} />}
-      title={source.name}
-      description={account ? `Connected as ${connectedAs(id, account)}` : undefined}
-    >
-      {account ? (
-        <Button title="Disconnect" onPress={() => void disconnect(id)} />
-      ) : (
-        <Button title="Connect…" onPress={() => showSettingsSheet(<ConnectSheet id={id} />)} />
-      )}
-    </Row>
-  );
-}
-
-
-function ConnectSheet({ id }: { id: LiveSourceId }) {
+export function ConnectAccountSheet({ id }: { id: LiveSourceId }) {
   const source = SOURCES[id];
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);

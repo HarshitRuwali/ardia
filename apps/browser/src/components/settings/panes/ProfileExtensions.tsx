@@ -1,7 +1,6 @@
 import {
   addFromWebStore,
   configure,
-  extensionsProfileId,
   loadUnpacked,
   openExtensionDetails,
   openInExtensionProfile,
@@ -10,21 +9,22 @@ import {
   removeExtension,
   setEnabled,
   setPinned,
-  showExtensionsList,
-  useExtensionList,
 } from "../../../state/extensions/actions";
-import type { InstalledExtension } from "../../../state/extensions/store";
-import { useEffect, useState } from "react";
+import { useExtensionList, type InstalledExtension } from "../../../state/extensions/store";
+import { useEffect } from "react";
 import { Image, View } from "react-native";
 import { currentEngineProfile } from "../../../state/browser/current";
 import { InstallDialogHost } from "../../extensions/ExtensionOverlays";
-import { Box, Button, PopUp, proseLineHeight, space, Text, TextField, Toggle } from "../../ui";
-import { Group, ProfilePicker, Row, SectionHeader } from "../Form";
+import { Box, Button, PopUp, proseLineHeight, space, Text, Toggle } from "../../ui";
+import { Group, Row, SectionHeader } from "../Form";
 import { extensionList } from "../../../state/settings/paneData";
 import { useResource } from "../../../state/settings/resources";
 import { closeSettingsSheet, showSettingsSheet } from "../../../state/settings/sheet";
 import { replaceSettingsPlace, SETTINGS_WINDOW_ID } from "../../../state/settings/settingsWindows";
+import { prompt, showMenu } from "../../../state/app/system";
 import { perLook } from "../../ui/tokens";
+import { useProfile } from "../../../state/browser/hooks";
+import { ProfileSubPage } from "./ProfileSubPage";
 
 type SiteAccess = "allSites" | "specificSites" | "onClick";
 const SITE_ACCESS: { value: SiteAccess; title: string }[] = [
@@ -35,93 +35,89 @@ const SITE_ACCESS: { value: SiteAccess; title: string }[] = [
 const siteAccessOf = (ext: InstalledExtension): SiteAccess =>
   ext.siteAccess === "ON_CLICK" ? "onClick" : ext.siteAccess === "ON_SPECIFIC_SITES" ? "specificSites" : "allSites";
 
-export function ExtensionsPane({ profileId: chosen, detail }: { profileId: string | null; detail: string | null }) {
-  const [profileId] = useState(() => extensionsProfileId(chosen));
+const showInstall = () => showSettingsSheet(<InstallDialogHost windowId={SETTINGS_WINDOW_ID} onClosed={closeSettingsSheet} />);
+
+async function addFromLink(profile: string) {
+  const link = await prompt({
+    title: "Add Extension from a Link",
+    message: "Paste a Chrome Web Store link or extension ID.",
+    placeholder: "chromewebstore.google.com/detail/…",
+    confirmTitle: "Add",
+  });
+  if (!link?.trim()) return;
+  void addFromWebStore(SETTINGS_WINDOW_ID, link.trim(), profile);
+  showInstall();
+}
+
+async function openMoreMenu(profile: string) {
+  const choice = await showMenu([
+    { id: "link", title: "Add from a Link…", symbol: "link" },
+    { id: "unpacked", title: "Load Unpacked Extension…", symbol: "folder" },
+  ]);
+  if (choice === "link") void addFromLink(profile);
+  else if (choice === "unpacked") void loadUnpacked(SETTINGS_WINDOW_ID, profile).then((chosen) => chosen && showInstall());
+}
+
+export function ExtensionsSection({ profileId }: { profileId: string }) {
   const profile = currentEngineProfile(profileId);
   const list = useExtensionList(profile);
-  const [link, setLink] = useState("");
-  const [loaded] = useResource(extensionList, profile);
-
-  const showInstall = () =>
-    showSettingsSheet(<InstallDialogHost windowId={SETTINGS_WINDOW_ID} onClosed={closeSettingsSheet} />);
-  const addLink = () => {
-    if (!link.trim()) return;
-    void addFromWebStore(SETTINGS_WINDOW_ID, link.trim(), profile);
-    showInstall();
-    setLink("");
-  };
-
-  const selected = detail && chosen === profileId ? list.find((x) => x.id === detail) : undefined;
-  const gone = !!detail && !selected && loaded !== undefined;
-  useEffect(() => {
-    if (gone) replaceSettingsPlace(profileId, null);
-  }, [gone, profileId]);
-  if (selected) return <ExtensionDetails ext={selected} profile={profile} onBack={() => showExtensionsList(profileId)} />;
+  useResource(extensionList, profile);
 
   return (
-    <View>
+    <>
       <SectionHeader
-        anchor="extensions.installed"
-        action={<ProfilePicker value={profileId} onChange={(id) => replaceSettingsPlace(id)} />}
+        title="Extensions"
+        action={<Button variant="icon" icon="ellipsis" size="m" tooltip="More" onPress={() => void openMoreMenu(profile)} />}
       />
-      {list.length ? (
-        <Group>
-          {list.map((ext) => (
-            <Row
-              key={ext.id}
-              icon={<Image source={{ uri: ext.icon }} style={{ width: 24, height: 24, opacity: ext.enabled ? 1 : 0.5 }} />}
-              title={
-                <Text lines={1}>
-                  {ext.name}
-                  <Text tone="textTertiary">{`  ${ext.version}${ext.fromWebStore ? "" : " · Developer"}`}</Text>
-                </Text>
-              }
-              description={ext.errors.length && !ext.enabled ? ext.errors[0] : ext.description}
-              onPress={() => openExtensionDetails(profileId, ext.id)}
-            >
-              <Toggle value={ext.enabled} onChange={(on) => void setEnabled(profile, ext.id, on)} />
-            </Row>
-          ))}
-        </Group>
-      ) : (
-        <Group>
-          <Row title="No extensions yet" description="Extensions you add appear here and in the Extensions menu." />
-        </Group>
-      )}
-
-      <SectionHeader title="Add extensions" />
       <Group>
-        <Row anchor="extensions.webStore">
-          <Button
-            title="Open Web Store"
-            onPress={() => openWebStoreFor(profile, profileId)}
-          />
-        </Row>
-        <Row anchor="extensions.addLink">
-          <Box row center gap="s">
-            <TextField value={link} onChangeText={setLink} placeholder="chromewebstore.google.com/detail/…" onSubmit={addLink} width={210} />
-            <Button title="Add" disabled={!link.trim()} onPress={addLink} />
-          </Box>
-        </Row>
-        <Row anchor="extensions.unpacked">
-          <Button
-            title="Choose Folder…"
-            onPress={() => void loadUnpacked(SETTINGS_WINDOW_ID, profile).then((chosen) => chosen && showInstall())}
-          />
+        <Row anchor="profiles.extensions" description={list.length ? undefined : "Extensions you add appear here and in the Extensions menu. Each profile has its own."} />
+        {list.map((ext) => (
+          <Row
+            key={ext.id}
+            icon={<Image source={{ uri: ext.icon }} style={{ width: 24, height: 24, opacity: ext.enabled ? 1 : 0.5 }} />}
+            title={
+              <Text lines={1}>
+                {ext.name}
+                <Text tone="textTertiary">{`  ${ext.version}${ext.fromWebStore ? "" : " · Developer"}`}</Text>
+              </Text>
+            }
+            description={ext.errors.length && !ext.enabled ? ext.errors[0] : ext.description}
+            onPress={() => openExtensionDetails(profileId, ext.id)}
+          >
+            <Toggle value={ext.enabled} onChange={(on) => void setEnabled(profile, ext.id, on)} />
+          </Row>
+        ))}
+        <Row anchor="profiles.webStore">
+          <Button title="Open Web Store" onPress={() => openWebStoreFor(profile, profileId)} />
         </Row>
       </Group>
-    </View>
+    </>
   );
 }
 
-function ExtensionDetails({ ext, profile, onBack }: { ext: InstalledExtension; profile: string; onBack: () => void }) {
+export function ExtensionPage({ profileId, extensionId }: { profileId: string; extensionId: string }) {
+  const profile = currentEngineProfile(profileId);
+  const list = useExtensionList(profile);
+  const [loaded] = useResource(extensionList, profile);
+  const name = useProfile(profileId, (p) => p?.name ?? "Profile");
+  const ext = list.find((x) => x.id === extensionId);
+  const gone = !ext && loaded !== undefined;
+  useEffect(() => {
+    if (gone) replaceSettingsPlace(profileId, null);
+  }, [gone, profileId]);
+  if (!ext) return null;
+  return (
+    <ProfileSubPage>
+      <ExtensionDetails ext={ext} profile={profile} />
+    </ProfileSubPage>
+  );
+}
+
+function ExtensionDetails({ ext, profile }: { ext: InstalledExtension; profile: string }) {
   const openTab = (url: string) => openInExtensionProfile(url, profile);
   return (
     <View>
       <Box gap="xl" style={DETAILS_TOP}>
-        <Box row center>
-          <Button title="All Extensions" icon="chevron.left" kind="plain" onPress={onBack} />
-        </Box>
         <Group>
           <Row
             icon={<Image source={{ uri: ext.icon }} style={DETAILS_ICON} />}
@@ -167,7 +163,7 @@ function ExtensionDetails({ ext, profile, onBack }: { ext: InstalledExtension; p
         {ext.userScriptsAvailable ? (
           <Row
             title="Allow User Scripts"
-            description="Lets it run code that no one has reviewed, like userscripts in Tampermonkey. Turn on only if you trust what you add."
+            description="Lets it run unreviewed code, like userscripts. Only for code you trust."
           >
             <Toggle value={!!ext.userScripts} onChange={(userScripts) => void configure(profile, ext.id, { userScripts })} />
           </Row>

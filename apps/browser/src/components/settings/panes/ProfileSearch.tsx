@@ -1,5 +1,5 @@
 import { engineHost, type SearchEngine } from "@ardia/core";
-import { Box, Button, DialogActions, DialogTitle, Sheet, space, Symbol, Text, TextField, Toggle } from "../../ui";
+import { Box, Button, Checkbox, DialogActions, DialogTitle, PopUp, Sheet, space, Symbol, Text, TextField } from "../../ui";
 import { useState } from "react";
 import { View } from "react-native";
 import { useTheme } from "../../ui/theme";
@@ -7,52 +7,79 @@ import { useSettings } from "../../../state/browser/hooks";
 import { currentEngineProfile, currentProfileOrder } from "../../../state/browser/current";
 import { addCustomEngine, removeCustomEngine, setSearchEngine, updateCustomEngine, updateSettings } from "../../../state/settings/actions";
 import { controllingSearchExtension, DEFAULT_PROFILE_ID, defaultSearchEngine, searchEngines } from "../../../state/settings/settings";
-import { extensionsProfileId, setEnabled } from "../../../state/extensions/actions";
+import { extensionsProfileId, openExtensionDetails, setEnabled } from "../../../state/extensions/actions";
 import { SiteFavicon } from "../../favicon/Favicon";
 import { FormField, Group, Row, SectionHeader, SettingToggle } from "../Form";
 import { closeSettingsSheet, showSettingsSheet } from "../../../state/settings/sheet";
-import { openSettings } from "../../../state/settings/settingsWindows";
+import { goToSettingsPane, SETTINGS_DETAIL } from "../../../state/settings/settingsWindows";
+import { setting } from "../settingsIndex";
+import { ProfileSubPage } from "./ProfileSubPage";
 
-function manageExtensionsOf(profile: string) {
-  const profileId = currentProfileOrder().find((id) => currentEngineProfile(id) === profile);
-  openSettings("extensions", extensionsProfileId(profileId));
+function manageExtensionsOf(profile: string, extensionId: string) {
+  const profileId = extensionsProfileId(currentProfileOrder().find((id) => currentEngineProfile(id) === profile));
+  openExtensionDetails(profileId, extensionId);
 }
 
-export function SearchPane() {
+export function SearchSection({ profileId }: { profileId: string }) {
+  const theme = useTheme();
   const engines = useSettings(searchEngines);
   const selectedId = useSettings((s) => defaultSearchEngine(s).id);
   const controlling = useSettings(controllingSearchExtension);
   const suggestions = useSettings((s) => s.searchSuggestions);
-  const theme = useTheme();
-  const builtIn = engines.filter((e) => !e.custom && !e.extension);
-  const custom = engines.filter((e) => e.custom);
-  const fromExtensions = engines.filter((e) => e.extension);
-  const locked = !!controlling;
+  const history = useSettings((s) => s.commandBarHistory);
 
   return (
-    <View>
-      <SectionHeader anchor="search.defaultEngine" />
+    <>
+      <SectionHeader title="Search" />
       <Group>
-        {controlling && (
+        {controlling ? (
           <Row
-            icon={<Symbol name="puzzlepiece.extension" size={13} color={theme.formAccent} style={{ width: 18, height: 18 }} />}
+            icon={<Symbol name="puzzlepiece.extension" size={13} color={theme.formAccent} style={EXTENSION_ICON} />}
             title={`${controlling.extensionName || "An extension"} is controlling this setting`}
             description="To change your default search engine, disable the extension or manage its settings."
           >
-            <Button title="Manage" onPress={() => manageExtensionsOf(controlling.profile)} />
+            <Button title="Manage" onPress={() => manageExtensionsOf(controlling.profile, controlling.extensionId)} />
             <Button title="Disable" onPress={() => void setEnabled(controlling.profile, controlling.extensionId, false)} />
           </Row>
-        )}
-        {builtIn.map((e) => (
-          <EngineRow key={e.id} engine={e} selected={selectedId === e.id} locked={locked} />
-        ))}
+        ) : null}
+        <Row anchor="profiles.searchEngine">
+          <PopUp
+            value={selectedId}
+            options={engines.map((e) => ({ value: e.id, title: e.name }))}
+            disabled={!!controlling}
+            onChange={(id) => setSearchEngine(id)}
+            minWidth={160}
+            accessibilityLabel={setting("profiles.searchEngine").title}
+          />
+        </Row>
+        <Row anchor="profiles.otherEngines" onPress={() => goToSettingsPane("profiles", profileId, SETTINGS_DETAIL.otherEngines)} />
+        <Row anchor="profiles.suggestWhileTyping">
+          <Box gap="s">
+            <Checkbox label="Searches" value={suggestions} onChange={(v) => updateSettings({ searchSuggestions: v })} />
+            <Checkbox label="Pages from history" value={history} onChange={(v) => updateSettings({ commandBarHistory: v })} />
+          </Box>
+        </Row>
+        <SettingToggle anchor="profiles.showSelectionSearch" />
       </Group>
+    </>
+  );
+}
 
+export function OtherEnginesPage({ profileId }: { profileId: string }) {
+  const engines = useSettings(searchEngines);
+  const selectedId = useSettings((s) => defaultSearchEngine(s).id);
+  const locked = useSettings((s) => !!controllingSearchExtension(s));
+  const custom = engines.filter((e) => e.custom);
+  const fromExtensions = engines.filter((e) => e.extension);
+
+  return (
+    <ProfileSubPage>
       <SectionHeader
-        anchor="search.otherEngines"
+        title={setting("profiles.otherEngines").title}
+        description={setting("profiles.otherEngines").description}
         action={<Button title="Add…" icon="plus" onPress={() => showSettingsSheet(<EngineSheet />)} />}
       />
-      <Group of="search.otherEngines">
+      <Group>
         {custom.length === 0 ? (
           <Row title="No custom search engines" description="Add one with a URL where %s stands for the search terms." />
         ) : (
@@ -62,7 +89,7 @@ export function SearchPane() {
 
       {fromExtensions.length > 0 && (
         <>
-          <SectionHeader title="Extensions" description="Some extensions can add search engines to Ardia." />
+          <SectionHeader title="From extensions" description="Some extensions can add search engines to Ardia." />
           <Group>
             {fromExtensions.map((e) => (
               <EngineRow key={e.id} engine={e} selected={selectedId === e.id} locked={locked} />
@@ -70,20 +97,7 @@ export function SearchPane() {
           </Group>
         </>
       )}
-
-      <SectionHeader title="Suggestions" />
-      <Group>
-        <Row anchor="search.suggestions">
-          <Toggle value={suggestions} onChange={(v) => updateSettings({ searchSuggestions: v })} />
-        </Row>
-        <SettingToggle anchor="search.commandBarHistory" />
-      </Group>
-
-      <SectionHeader title="Text selection" />
-      <Group>
-        <SettingToggle anchor="search.showSelectionSearch" />
-      </Group>
-    </View>
+    </ProfileSubPage>
   );
 }
 
@@ -96,12 +110,10 @@ function EngineRow({ engine, selected, locked, editable }: { engine: SearchEngin
       : engine.keyword;
   return (
     <Row icon={<SiteFavicon host={engineHost(engine)} profileId={DEFAULT_PROFILE_ID} />} title={engine.name} description={description}>
-      {editable && (
-        <Button variant="icon" icon="pencil" size="m" onPress={() => showSettingsSheet(<EngineSheet engine={engine} />)} tooltip="Edit" />
-      )}
+      {editable && <Button variant="icon" icon="pencil" size="m" onPress={() => showSettingsSheet(<EngineSheet engine={engine} />)} tooltip="Edit" />}
       {selected ? (
         <Box row gap="xs" style={DEFAULT_MARK}>
-          <Symbol name="checkmark" size={11} weight="semibold" color={theme.formAccent} style={{ width: 14, height: 14 }} />
+          <Symbol name="checkmark" size={11} weight="semibold" color={theme.formAccent} style={CHECK} />
           <Text size="small" tone="textSecondary">
             Default
           </Text>
@@ -168,6 +180,8 @@ function EngineSheet({ engine }: { engine?: SearchEngine }) {
   );
 }
 
+const EXTENSION_ICON = { width: 18, height: 18 } as const;
+const CHECK = { width: 14, height: 14 } as const;
 const DEFAULT_WIDTH = { minWidth: 92 } as const;
 const DEFAULT_MARK = { ...DEFAULT_WIDTH, alignItems: "center", justifyContent: "flex-end" } as const;
 const ERROR = { marginTop: space.ml } as const;

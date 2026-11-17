@@ -1,14 +1,26 @@
-import { type SystemCalendar, calendarBlocked, connectCalendar, openCalendarPrivacy, setCalendarHidden, useCalendar } from "../../../state/live/calendar";
 import { View } from "react-native";
+import { type SystemCalendar, calendarBlocked, connectCalendar, openCalendarPrivacy, setCalendarHidden, useCalendar } from "../../../state/live/calendar";
 import { ALERT_LEADS, COUNTDOWN_LEADS, countdownLeadTitle } from "../../../state/live/meetings";
 import { updateCalendarSettings, useLive } from "../../../state/live/store";
 import { useSettings } from "../../../state/browser/hooks";
 import { updateSettings } from "../../../state/settings/actions";
-import { Box, Button, Checkbox, EmptyState, PopUp, radius, space, Text, Toggle } from "../../ui";
-import { Group, Row, SectionHeader } from "../Form";
+import { PLATFORM_FEATURES } from "../../../lib/platformFeatures";
+import { Box, Button, Checkbox, EmptyState, PopUp, radius, space, Text, Toggle, type Option } from "../../ui";
 import { perLook } from "../../ui/tokens";
+import { Group, Row, SectionHeader } from "../Form";
 
-export function CalendarPane() {
+const COUNTDOWN_OFF = "off";
+const COUNTDOWN_OPTIONS: Option<string>[] = [
+  { value: COUNTDOWN_OFF, title: "Off" },
+  ...COUNTDOWN_LEADS.map((m, i) => ({ value: String(m), title: countdownLeadTitle(m), separatorBefore: i === 0 })),
+];
+
+export function CalendarSection() {
+  if (!PLATFORM_FEATURES.calendar) return null;
+  return <OfferedCalendarSection />;
+}
+
+function OfferedCalendarSection() {
   const settings = useLive((s) => s.calendar);
   const { access, calendars, requesting, requestError } = useCalendar();
   const autoGroup = useSettings((s) => s.autoGroupMeetingTabs);
@@ -16,16 +28,19 @@ export function CalendarPane() {
   const blocked = calendarBlocked(access);
   const owned = calendars.filter((c) => c.owned);
   const others = calendars.filter((c) => !c.owned);
+  const countdown = settings.showTimeToNext ? String(settings.countdownLead) : COUNTDOWN_OFF;
+  const pickCountdown = (value: string) =>
+    updateCalendarSettings(value === COUNTDOWN_OFF ? { showTimeToNext: false } : { showTimeToNext: true, countdownLead: Number(value) });
 
   return (
     <View>
       <SectionHeader
-        title="Live Calendar"
-        description="Pin Google Calendar, Outlook, iCloud or Notion Calendar to see your day when you hover it, a countdown to your next meeting, and alerts with a Join button before meetings start. Events come from the Calendar app's accounts."
+        title="Calendar"
+        description="Pin a calendar to see your day, a countdown and meeting alerts. Uses the Calendar app's accounts."
       />
       <Group>
         <Row
-          anchor="calendar.access"
+          anchor="automations.calendarAccess"
           description={
             access === "fixture"
               ? "Development build: using calendar-fixture.json"
@@ -45,14 +60,10 @@ export function CalendarPane() {
             </Box>
           ) : null}
         </Row>
-      </Group>
-
-      <SectionHeader title="Meeting alerts" />
-      <Group>
-        <Row anchor="calendar.nextAlert">
+        <Row anchor="automations.meetingAlert">
           <PopUp value={settings.alertLead} options={ALERT_LEADS.map((l) => ({ value: l.value, title: l.title, separatorBefore: l.value === "start" }))} onChange={(v) => updateCalendarSettings({ alertLead: v })} minWidth={170} />
         </Row>
-        <Row anchor="calendar.alertCondition">
+        <Row anchor="automations.meetingAlertCondition">
           <PopUp
             value={settings.alertCondition}
             options={[
@@ -64,35 +75,18 @@ export function CalendarPane() {
             minWidth={170}
           />
         </Row>
-      </Group>
-
-      <SectionHeader title="Pinned calendar" />
-      <Group>
-        <Row anchor="calendar.preview">
-          <Toggle value={settings.showPreview} onChange={(v) => updateCalendarSettings({ showPreview: v })} />
+        <Row anchor="automations.calendarPreview">
+          <Toggle value={settings.showPreview} accessibilityLabel="Show calendar preview" onChange={(v) => updateCalendarSettings({ showPreview: v })} />
         </Row>
-        <Row anchor="calendar.timeToNext">
-          <Toggle value={settings.showTimeToNext} onChange={(v) => updateCalendarSettings({ showTimeToNext: v })} />
+        <Row anchor="automations.countdown">
+          <PopUp value={countdown} options={COUNTDOWN_OPTIONS} onChange={pickCountdown} minWidth={170} accessibilityLabel="Countdown to next meeting" />
         </Row>
-        <Row anchor="calendar.countdownLead">
-          <PopUp
-            value={String(settings.countdownLead)}
-            options={COUNTDOWN_LEADS.map((m) => ({ value: String(m), title: countdownLeadTitle(m) }))}
-            disabled={!settings.showTimeToNext}
-            onChange={(v) => updateCalendarSettings({ countdownLead: Number(v) })}
-            minWidth={170}
-          />
+        <Row anchor="automations.groupMeetingTabs">
+          <Toggle value={autoGroup} accessibilityLabel="Group tabs for meetings" onChange={(v) => updateSettings({ autoGroupMeetingTabs: v })} />
         </Row>
       </Group>
 
-      <SectionHeader title="Meetings" />
-      <Group>
-        <Row anchor="calendar.autoGroup">
-          <Toggle value={autoGroup} onChange={(v) => updateSettings({ autoGroupMeetingTabs: v })} />
-        </Row>
-      </Group>
-
-      {calendars.length ? (
+      {connected && calendars.length ? (
         <>
           <SectionHeader title="Active calendars" description="Meetings from unchecked calendars don't show or alert." />
           <Group>

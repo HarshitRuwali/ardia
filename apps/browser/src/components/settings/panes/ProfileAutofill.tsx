@@ -11,52 +11,30 @@ import {
 import { orWarn } from "../../../lib/fallback";
 import { PLATFORM_TERMS } from "../../../lib/platformTerms";
 import { confirm, copyText } from "../../../state/app/system";
-import { Box, Button, DialogActions, DialogTitle, type Option, PopUp, Sheet, space, Symbol, Text, TextField, Toggle } from "../../ui";
-import { useState } from "react";
+import { Box, Button, DialogActions, DialogTitle, type Option, PopUp, Sheet, space, Symbol, Text, TextField } from "../../ui";
+import { useState, type ReactNode } from "react";
 import { View } from "react-native";
 import { useTheme } from "../../ui/theme";
 import { currentEngineProfile } from "../../../state/browser/current";
-import { Group, ProfilePicker, Row, SectionHeader, useSettingsProfile } from "../Form";
-import { keptByExtensionNote } from "../keptByExtension";
+import { Group, Row, SectionHeader } from "../Form";
 import { NetworkBadge } from "../../site/Autofill";
-import { addresses as addressList, autofillEnabled, autofillToggleAsked, cards as cardList, setAutofillFor } from "../../../state/settings/paneData";
+import { addresses as addressList, cards as cardList } from "../../../state/settings/paneData";
 import { useResource } from "../../../state/settings/resources";
 import { closeSettingsSheet, showSettingsSheet } from "../../../state/settings/sheet";
+import { setting } from "../settingsIndex";
+import { ProfileSubPage } from "./ProfileSubPage";
 
-export function AutofillPane({ profileId: initial }: { profileId?: string | null }) {
+export function AddressesPage({ profileId }: { profileId: string }) {
   const theme = useTheme();
-  const [profileId, setProfileId] = useSettingsProfile(initial);
   const profile = currentEngineProfile(profileId);
-  const [addresses, reloadAddresses] = useResource(addressList, profile);
-  const [cards, reloadCards] = useResource(cardList, profile);
-  const [enabled] = useResource(autofillEnabled, profile);
-  const [addressesAsked] = useResource(autofillToggleAsked, profile, "addresses");
-  const [cardsAsked] = useResource(autofillToggleAsked, profile, "cards");
-
-  const load = () => {
-    void reloadAddresses();
-    void reloadCards();
-  };
-  const toggle = (kind: Parameters<typeof setAutofillFor>[1], on: boolean) => setAutofillFor(profile, kind, on);
+  const [addresses, reload] = useResource(addressList, profile);
+  const load = () => void reload();
 
   return (
-    <View>
+    <ProfileSubPage>
       <SectionHeader
-        title="Autofill"
-        description={`Addresses and cards you save are offered when you fill in a form, separately for each profile. Card numbers are kept in ${PLATFORM_TERMS.secretStore}.`}
-        action={<ProfilePicker value={profileId} onChange={setProfileId} />}
-      />
-      <Group>
-        <Row anchor="autofill.addresses" description={keptByExtensionNote(enabled?.addresses, addressesAsked)}>
-          <Toggle value={enabled?.addresses ?? true} disabled={!enabled} onChange={(v) => toggle("addresses", v)} />
-        </Row>
-        <Row anchor="autofill.cards" description={keptByExtensionNote(enabled?.cards, cardsAsked)}>
-          <Toggle value={enabled?.cards ?? true} disabled={!enabled} onChange={(v) => toggle("cards", v)} />
-        </Row>
-      </Group>
-
-      <SectionHeader
-        anchor="autofill.addressList"
+        title="Addresses"
+        description={setting("profiles.addresses").description}
         action={<Button title="Add Address…" onPress={() => showSettingsSheet(<AddressSheet profile={profile} onChanged={load} />)} />}
       />
       <Group>
@@ -66,7 +44,7 @@ export function AutofillPane({ profileId: initial }: { profileId?: string | null
           (addresses ?? []).map((a) => (
             <Row
               key={a.id}
-              icon={<Symbol name="person.crop.circle" size={15} color={theme.icon} style={{ width: 22, height: 22 }} />}
+              icon={<Symbol name="person.crop.circle" size={15} color={theme.icon} style={PERSON_ICON} />}
               title={a.name || firstLine(a.street) || a.email || "Address"}
               description={addressSummary(a)}
               onPress={() => showSettingsSheet(<AddressSheet profile={profile} saved={a} onChanged={load} />)}
@@ -74,9 +52,20 @@ export function AutofillPane({ profileId: initial }: { profileId?: string | null
           ))
         )}
       </Group>
+    </ProfileSubPage>
+  );
+}
 
+export function CardsPage({ profileId }: { profileId: string }) {
+  const profile = currentEngineProfile(profileId);
+  const [cards, reload] = useResource(cardList, profile);
+  const load = () => void reload();
+
+  return (
+    <ProfileSubPage>
       <SectionHeader
-        anchor="autofill.cardList"
+        title="Cards"
+        description={`${setting("profiles.cards").description} Card numbers are kept in ${PLATFORM_TERMS.secretStore}.`}
         action={<Button title="Add Card…" onPress={() => showSettingsSheet(<CardSheet profile={profile} onChanged={load} />)} />}
       />
       <Group>
@@ -94,9 +83,11 @@ export function AutofillPane({ profileId: initial }: { profileId?: string | null
           ))
         )}
       </Group>
-    </View>
+    </ProfileSubPage>
   );
 }
+
+const PERSON_ICON = { width: 22, height: 22 } as const;
 
 const firstLine = (street?: string) => street?.split("\n")[0] ?? "";
 
@@ -131,7 +122,7 @@ function formatCardNumber(digits: string) {
   return out.join(" ");
 }
 
-function FormRow({ title, children }: { title: string; children: React.ReactNode }) {
+function FormRow({ title, children }: { title: string; children: ReactNode }) {
   return <Row title={title}>{children}</Row>;
 }
 
