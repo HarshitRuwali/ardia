@@ -122,7 +122,16 @@ export function numberedTabs(s: BrowserState, windowId: string): string[] {
   return [...tiles, ...pinned.flatMap(rowTab), ...list.flatMap(rowTab)];
 }
 
-const groupMemo = new WeakMap<object, { tabs: BrowserState["tabs"]; splits: BrowserState["splits"]; groups: BrowserState["groups"]; result: string[] }>();
+const groupMemo = new WeakMap<object, { tabs: BrowserState["tabs"]; splits: BrowserState["splits"]; groupsId: number; result: string[] }>();
+
+const groupsIds = new WeakMap<object, number>();
+let lastGroupsId = 0;
+
+function groupsIdOf(groups: BrowserState["groups"]): number {
+  let id = groupsIds.get(groups);
+  if (id === undefined) groupsIds.set(groups, (id = ++lastGroupsId));
+  return id;
+}
 
 const childIndex = new WeakMap<object, Map<string, BrowserState["groups"][string][]>>();
 const NO_CHILDREN: BrowserState["groups"][string][] = [];
@@ -182,7 +191,8 @@ export function groupEntries(s: BrowserState, groupId: string): string[] {
   const g = s.groups[groupId];
   if (!g) return [];
   const cached = groupMemo.get(g);
-  if (cached && cached.splits === s.splits && cached.groups === s.groups && sameEntryTabs(s.tabs, cached.tabs)) {
+  const groupsId = groupsIdOf(s.groups);
+  if (cached && cached.splits === s.splits && cached.groupsId === groupsId && sameEntryTabs(s.tabs, cached.tabs)) {
     cached.tabs = s.tabs;
     return cached.result;
   }
@@ -200,7 +210,7 @@ export function groupEntries(s: BrowserState, groupId: string): string[] {
     }
   }
   const result = stableList(cached?.result, out);
-  groupMemo.set(g, { tabs: s.tabs, splits: s.splits, groups: s.groups, result });
+  groupMemo.set(g, { tabs: s.tabs, splits: s.splits, groupsId, result });
   return result;
 }
 
