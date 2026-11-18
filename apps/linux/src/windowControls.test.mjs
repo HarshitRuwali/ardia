@@ -62,6 +62,14 @@ test("with the window buttons hidden every layout keeps the header's hamburger a
   }
 });
 
+test("the header's empty room beside the hamburger drags the window: the profile controls pass presses through except on their buttons", async () => {
+  const { readFileSync } = await import("node:fs");
+  const css = readFileSync(new URL("./styles.css", import.meta.url), "utf8");
+  const rule = (selector) => new RegExp(`(^|\\n)${selector.replace(/[.>]/g, (c) => `\\${c}`)} \\{([^}]*)\\}`).exec(css)?.[2] ?? "";
+  assert.match(rule(".ardia-profile-controls"), /pointer-events: none;/);
+  assert.match(rule(".ardia-profile-controls > .ardia-header-button"), /pointer-events: auto;/);
+});
+
 test("minimize and maximize reach the Linux host's window calls; caption regions are the shell's own drag regions", async () => {
   const calls = [];
   globalThis.window = { __ardiaHost: { bootstrap: { windowId: "main", profileId: "default" }, invoke: async (method, args) => void calls.push([method, args.args]), onEvent: () => () => {} } };
