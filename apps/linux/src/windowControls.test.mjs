@@ -23,6 +23,7 @@ test("the traffic lights show only when chosen, and hide while the window or a p
   const shown = (style, pageFullScreen = false, windowFullScreen = false) => trafficLightsShown({ style, pageFullScreen, windowFullScreen });
   assert.equal(shown("trafficLights"), true);
   assert.equal(shown("native"), false);
+  assert.equal(shown("hidden"), false);
   assert.equal(shown("trafficLights", true), false);
   assert.equal(shown("trafficLights", false, true), false);
 });
@@ -41,6 +42,23 @@ test("with the traffic lights every layout keeps the header's hamburger, never c
       assert.equal(headerFitsDownloads(s, "w", false, TRAFFIC_LIGHTS_CHROME), true, label);
     }
     assert.equal(linuxDownloadsInSidebarFooter(state(settings), "w", false, TRAFFIC_LIGHTS_CHROME), !!addressBarInSidebar(state(settings), "w"), JSON.stringify(settings));
+  }
+});
+
+test("with the window buttons hidden every layout keeps the header's hamburger and keeps no room for buttons, so a tiling window manager's window still has its menu", async () => {
+  const { menuBesideWindowButtons, linuxSidebarCaptionRoom, linuxSidebarHeaderCollapsed, linuxDownloadsInSidebarFooter, headerFitsDownloads, addressBarInSidebar } = await import("./sidebarHeaderLayout.ts");
+  const { HIDDEN_BUTTONS_CHROME } = await import("../../browser/src/lib/platformChrome.linux.ts");
+  const layouts = [{}, { compactToolbar: true }, { sidebarSide: "right" }, { sidebarSide: "right", sidebarWidth: 160 }, { tabLayout: "top" }, { autoHideTabs: true }, { minimalismMode: true }, { addressBar: "sidebar" }];
+  for (const settings of layouts) {
+    for (const window of [{}, { fullScreen: true }, { kind: "small" }]) {
+      const s = state(settings, window);
+      const label = JSON.stringify([settings, window]);
+      assert.equal(menuBesideWindowButtons(s, "w", false, HIDDEN_BUTTONS_CHROME), false, label);
+      assert.equal(linuxSidebarCaptionRoom(s, "w", false, HIDDEN_BUTTONS_CHROME), 0, label);
+      assert.equal(linuxSidebarHeaderCollapsed(s, "w", false, HIDDEN_BUTTONS_CHROME), false, label);
+      assert.equal(headerFitsDownloads(s, "w", false, HIDDEN_BUTTONS_CHROME), true, label);
+    }
+    assert.equal(linuxDownloadsInSidebarFooter(state(settings), "w", false, HIDDEN_BUTTONS_CHROME), !!addressBarInSidebar(state(settings), "w"), JSON.stringify(settings));
   }
 });
 

@@ -64,8 +64,8 @@ export const appearanceRows = {
       rows: {
         windowButtons: {
           title: "Window buttons",
-          description: "Native puts minimize, maximize and close at the top right. Traffic lights put close, minimize and maximize at the top left, as on a Mac. Full screen hides both.",
-          keywords: ["window controls", "title bar", "titlebar", "close button", "minimize", "maximize", "traffic lights", "gnome", "kde", "native", "decorations", "linux"],
+          description: "Native puts minimize, maximize and close at the top right. Traffic lights put close, minimize and maximize at the top left, as on a Mac. Full screen hides both. Hidden draws none and keeps no room for them, for tiling window managers; the menu button stays in the header.",
+          keywords: ["window controls", "title bar", "titlebar", "close button", "minimize", "maximize", "traffic lights", "gnome", "kde", "native", "decorations", "linux", "hidden", "none", "tiling", "i3", "sway", "hyprland"],
           shown: () => windowButtonsChoosable,
         },
       },

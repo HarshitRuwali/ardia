@@ -312,6 +312,23 @@ test("on Linux with the traffic lights no layout keeps room or a place for drawn
   assert.deepEqual(littleArdiaBarLayout(linux.TRAFFIC_LIGHTS_CHROME), littleArdiaBarLayout(mac));
 });
 
+test("on Linux with the window buttons hidden no layout keeps room or a place for them, nor room for traffic lights", () => {
+  for (const [settings, window] of LAYOUTS) {
+    const s = state(settings, window);
+    assert.equal(windowControlsPlace(s, "w", 9, linux.HIDDEN_BUTTONS_CHROME), null);
+    assert.equal(cardCaptionRoom(s, "w", 9, linux.HIDDEN_BUTTONS_CHROME), 0);
+    assert.equal(cardTopInset(s, "w", 9, linux.HIDDEN_BUTTONS_CHROME), 9);
+    assert.equal(sidebarCaptionRoom(s, "w", linux.HIDDEN_BUTTONS_CHROME), 0);
+    assert.equal(sidebarControlsRow(s, "w", linux.HIDDEN_BUTTONS_CHROME), 0);
+    assert.deepEqual(captionRegions(s, "w", false, linux.HIDDEN_BUTTONS_CHROME), []);
+  }
+  assert.equal(stripCaptionRoom(false, false, linux.HIDDEN_BUTTONS_CHROME), 0);
+  const bar = littleArdiaBarLayout(linux.HIDDEN_BUTTONS_CHROME);
+  assert.equal(bar.height, SMALL_BAR_HEIGHT);
+  assert.equal(bar.trailingRoom, 0);
+  assert.ok(bar.navLeft < littleArdiaBarLayout(linux.TRAFFIC_LIGHTS_CHROME).navLeft, "Little Ardia's back button starts at the edge, not after lights");
+});
+
 test("on Linux with native buttons every layout places them where the Windows build does", () => {
   for (const [settings, window] of LAYOUTS) {
     const s = state(settings, window);

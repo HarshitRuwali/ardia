@@ -13,7 +13,9 @@ test("window buttons default to native, stay on this device, sit in config files
   assert.equal(SETTING_SPECS.windowButtons.synced, false);
   assert.ok(isConfigSettingKey("windowButtons"));
   assert.equal(parseSettings({ windowButtons: "trafficLights" }).windowButtons, "trafficLights");
+  assert.equal(parseSettings({ windowButtons: "hidden" }).windowButtons, "hidden");
   assert.equal(parseSettings({ windowButtons: "windows" }).windowButtons, "native");
+  assert.equal(settingsSnapshot(parseSettings({ windowButtons: "hidden" })).setting_windowButtons, "hidden");
   const snap = settingsSnapshot(parseSettings({ windowButtons: "trafficLights" }));
   assert.equal(snap.setting_windowButtons, "trafficLights");
   assert.equal(snap.default_windowButtons, "native");
@@ -47,6 +49,27 @@ test("on Linux the window chrome follows the setting live, before anything that 
   stop();
   set("trafficLights");
   assert.deepEqual(linux.WINDOW_CHROME, linux.NATIVE_BUTTONS_CHROME, "a stopped sync leaves the chrome alone");
+});
+
+test("choosing Hidden on Linux takes the window buttons away live, and choosing native brings them back", () => {
+  let state = { settings: { ...DEFAULT_SETTINGS } };
+  const listeners = [];
+  const store = { getState: () => state, subscribe: (listener) => (listeners.push(listener), () => listeners.splice(listeners.indexOf(listener), 1)) };
+  const stop = startWindowButtonStyle(store, { styles: linux.WINDOW_BUTTON_STYLES, apply: linux.applyWindowButtonStyle });
+  const set = (windowButtons) => {
+    state = { settings: { ...state.settings, windowButtons } };
+    for (const listener of [...listeners]) listener(state);
+  };
+  set("hidden");
+  assert.deepEqual(linux.WINDOW_CHROME, linux.HIDDEN_BUTTONS_CHROME);
+  assert.equal(windowButtonStyleIn(state, linux.WINDOW_BUTTON_STYLES), "hidden");
+  set("trafficLights");
+  assert.deepEqual(linux.WINDOW_CHROME, linux.TRAFFIC_LIGHTS_CHROME);
+  set("hidden");
+  assert.deepEqual(linux.WINDOW_CHROME, linux.HIDDEN_BUTTONS_CHROME);
+  set("native");
+  assert.deepEqual(linux.WINDOW_CHROME, linux.NATIVE_BUTTONS_CHROME);
+  stop();
 });
 
 test("a saved choice of traffic lights applies before the first window draws", () => {

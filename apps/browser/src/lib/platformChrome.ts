@@ -4,7 +4,7 @@ export type WindowChrome = {
   titleBarHeight: number;
 };
 
-export type WindowButtonStyle = "native" | "trafficLights";
+export type WindowButtonStyle = "native" | "trafficLights" | "hidden";
 
 export type PopUpChrome = {
   indicator: "accentUpDown" | "chevronDown";
