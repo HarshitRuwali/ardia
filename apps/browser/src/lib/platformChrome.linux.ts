@@ -1,6 +1,8 @@
 import type { PopUpChrome, WindowButtonStyle, WindowChrome } from "./platformChrome";
 import { WINDOW_CHROME as WINDOWS_CHROME } from "./platformChrome.windows";
 
+export { ADVANCED_PANE_SYMBOL } from "./platformChrome.windows";
+
 export const NATIVE_BUTTONS_CHROME: WindowChrome = { ...WINDOWS_CHROME };
 
 export const TRAFFIC_LIGHTS_CHROME: WindowChrome = { leadingWidth: 78, trailingWidth: 0, titleBarHeight: 0 };
