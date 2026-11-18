@@ -80,8 +80,10 @@ For the architecture and the test tooling, read `docs/agent-brief.md`.
 - **The owner's real browser data is fair game for debugging.** Read the owner's Ardia, Dia and other browser
   profiles when they help reproduce a bug. Copy what you need into a scratch dir and point a hidden instance's
   `ARDIA_DATA_DIR` at the copy; never write to the live profile or open it in a running app.
-- **No AI features.** This is the owner's decision. Dia's AI rows in `docs/dia-feature-parity.md`
-  stay ⏸.
+- **AI only through the plugin.** This is the owner's decision. The base browser has no AI feature and runs no AI
+  code. AI ships as a first-party plugin on the plugin host (#2462, #2463), off until the user enables it, and
+  whatever it needs from the browser becomes a public extension point any plugin can use, never a private hook.
+  Dia's AI rows in `docs/dia-feature-parity.md` stay ⏸ until the plugin ships them.
 
 ## Platforms
 One browser UI (`apps/browser/src` and `packages/*/src`) runs on three platforms, each with its own native layer and
@@ -218,7 +220,7 @@ app (`docs/windows.md`), and `apps/linux` the Linux UI with `scripts/linux` for 
 the Windows packaging, checks and engine build. The native Expo modules are in `packages/{ardiacore,shell,shaders,import,sync}`; `engine/chromium` is our Chrome-services code (the `ac_*` C calls) and `engine/ardiacore` ArdiaCore's window and tab layer
 (`engine/ardiacore-linux` on Linux),
 and `packages/core` holds the omnibox logic and its tests. `packages/demo` is the app on the web (the site's demo).
-`apps/cli` is the `ardia` command, `apps/ios` the iPhone app and `apps/dashboard` the telemetry and triage dashboard.
+`apps/cli` is the `ardia` command, `apps/phone` the Expo app for iPhone and Android (its native module is `packages/phone`; `docs/phone.md`) and `apps/dashboard` the telemetry and triage dashboard.
 `apps/site` is ardia.dev and `apps/videos` holds the Remotion videos. `infra/` holds each service's deploy setup and
 `extras/` the add-ons (the Raycast extension). Ardia's own source files are Apache-2.0; the app as distributed is
 GPL-3.0, because its engine carries Helium's patches (`NOTICE`).

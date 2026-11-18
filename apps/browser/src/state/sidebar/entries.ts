@@ -22,22 +22,36 @@ export function sameEntryTabs(tabs: BrowserState["tabs"], was: BrowserState["tab
   return true;
 }
 
-export type EntriesInputs = { tabs: BrowserState["tabs"]; rest: readonly unknown[] };
+export type EntriesInputs = Pick<BrowserState, "tabs" | "windows" | "groups" | "splits"> & Pick<BrowserState["settings"], "newTabOpens" | "minimalismMode">;
 
-export const entriesInputs = (s: BrowserState): EntriesInputs => ({ tabs: s.tabs, rest: [s.windows, s.groups, s.splits, s.settings.newTabOpens, s.settings.minimalismMode] });
+export const entriesInputs = (s: BrowserState): EntriesInputs => ({
+  tabs: s.tabs,
+  windows: s.windows,
+  groups: s.groups,
+  splits: s.splits,
+  newTabOpens: s.settings.newTabOpens,
+  minimalismMode: s.settings.minimalismMode,
+});
 
-export const sameEntriesInputs = (now: EntriesInputs, was: EntriesInputs) => now.rest.every((v, i) => v === was.rest[i]) && sameEntryTabs(now.tabs, was.tabs);
+export function sameEntriesInputs(s: BrowserState, was: EntriesInputs): boolean {
+  const same =
+    s.windows === was.windows &&
+    s.groups === was.groups &&
+    s.splits === was.splits &&
+    s.settings.newTabOpens === was.newTabOpens &&
+    s.settings.minimalismMode === was.minimalismMode &&
+    sameEntryTabs(s.tabs, was.tabs);
+  if (same) was.tabs = s.tabs;
+  return same;
+}
 
-const memo = new Map<string, { inputs: EntriesInputs; result: SidebarEntries }>();
+const memo = new Map<string, Map<string, { inputs: EntriesInputs; result: SidebarEntries }>>();
 
 export function sidebarEntries(s: BrowserState, windowId: string, profileId?: string): SidebarEntries {
+  let byProfile = memo.get(windowId);
+  const cached = byProfile?.get(profileId ?? "");
+  if (cached && sameEntriesInputs(s, cached.inputs)) return cached.result;
   const inputs = entriesInputs(s);
-  const key = profileId ? `${windowId}|${profileId}` : windowId;
-  const cached = memo.get(key);
-  if (cached && sameEntriesInputs(inputs, cached.inputs)) {
-    cached.inputs = inputs;
-    return cached.result;
-  }
   let result = computeEntries(s, windowId, profileId);
   if (cached) {
     const was = cached.result;
@@ -48,8 +62,9 @@ export function sidebarEntries(s: BrowserState, windowId: string, profileId?: st
     const list = same(result.list, was.list) ? was.list : result.list;
     result = tiles === was.tiles && cells === was.cells && pinned === was.pinned && list === was.list ? was : { tiles, cells, pinned, list };
   }
-  memo.set(key, { inputs, result });
-  if (memo.size > 8) for (const k of memo.keys()) if (!s.windows[k.split("|")[0]!]) memo.delete(k);
+  if (!byProfile) memo.set(windowId, (byProfile = new Map()));
+  byProfile.set(profileId ?? "", { inputs, result });
+  if (memo.size > 8) for (const k of memo.keys()) if (!s.windows[k]) memo.delete(k);
   return result;
 }
 
