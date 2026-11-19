@@ -205,7 +205,7 @@ function HistoryButtons({ tabId, windowId, bar }: { tabId: string; windowId: str
   const forward = useMemo(() => navPlace(bar, 1, hit), [bar, hit]);
   return (
     <>
-      <HistoryButton place={back} tabId={tabId} windowId={windowId} direction={-1} disabled={!history.back} palette={palette} onFocus={alreadyFocused} />
+      <HistoryButton place={back} tabId={tabId} windowId={windowId} direction={-1} disabled={!history.back} palette={palette} onFocus={alreadyFocused} closesTab={history.backCloses} />
       <HistoryButton place={forward} tabId={tabId} windowId={windowId} direction={1} disabled={!history.forward} palette={palette} onFocus={alreadyFocused} />
     </>
   );

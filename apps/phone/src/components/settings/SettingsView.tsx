@@ -18,6 +18,8 @@ import { DefaultBrowserPage } from "./DefaultBrowserPage";
 import { WhatsSentPage } from "./WhatsSentPage";
 import { popSettings, pushSettings } from "../../state/settings/nav";
 import { ExpoSettingsStack } from "./ExpoSettingsStack";
+import { BrowseForMePage } from "./BrowseForMePage";
+import { PageSummaryPage } from "./PageSummaryPage";
 
 const push = SlideInRight.springify().stiffness(tabsMotion.sheetIn.stiffness).damping(tabsMotion.sheetIn.damping);
 const reveal = SlideInLeft.springify().stiffness(tabsMotion.sheetIn.stiffness).damping(tabsMotion.sheetIn.damping);
@@ -73,7 +75,9 @@ export function SettingsPageFor({ route }: { route: SettingsRoute }) {
     case "whatsSent":
       return <WhatsSentPage />;
     case "browseForMe":
-      return null;
+      return <BrowseForMePage />;
+    case "pageSummary":
+      return <PageSummaryPage />;
   }
 }
 

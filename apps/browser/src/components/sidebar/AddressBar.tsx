@@ -102,6 +102,7 @@ function NavigationButtons({
             windowId={tab.windowId}
             direction={b === "back" ? -1 : 1}
             disabled={b === "back" ? !history.back : !history.forward}
+            closesTab={b === "back" && history.backCloses}
             palette={palette}
             onFocus={alreadyFocused}
           />
