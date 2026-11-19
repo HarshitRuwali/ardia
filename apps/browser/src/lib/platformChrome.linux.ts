@@ -1,7 +1,7 @@
 import type { PopUpChrome, WindowButtonStyle, WindowChrome } from "./platformChrome";
 import { WINDOW_CHROME as WINDOWS_CHROME } from "./platformChrome.windows";
 
-export { ADVANCED_PANE_SYMBOL } from "./platformChrome.windows";
+export { ADVANCED_PANE_SYMBOL, PANEL_FIELD_LIFT } from "./platformChrome.windows";
 
 export const NATIVE_BUTTONS_CHROME: WindowChrome = { ...WINDOWS_CHROME };
 

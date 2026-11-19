@@ -9,3 +9,5 @@ export const applyWindowButtonStyle = (_style: WindowButtonStyle): boolean => fa
 export const POP_UP_CHROME: PopUpChrome = { indicator: "chevronDown", growsToItsTitle: true };
 
 export const ADVANCED_PANE_SYMBOL = "slider.horizontal.2.square";
+
+export const PANEL_FIELD_LIFT = -3;
