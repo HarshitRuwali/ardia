@@ -14,6 +14,7 @@ import { usePagerPages } from "../../state/windows/profilePager";
 import { PROFILE_DOTS_HEIGHT, ProfileDots, useProfileDotsShown } from "../profiles/ProfileDots";
 import { SidebarAddressRow, SidebarHeaderTools } from "./AddressBar";
 import { DragGhost } from "./DragGhost";
+import { DropLine } from "./DropMarks";
 import { DragProvider } from "./DragProvider";
 import type { DragController } from "./dragController";
 import type { Ghost } from "./dragModel";
@@ -166,7 +167,12 @@ export function Sidebar({ width }: { width: number }) {
             ) : null}
             <SidebarTextScope>
               <FolderPanel windowId={windowId} />
-              {ghost ? <DragGhost ghost={ghost} /> : null}
+              {ghost ? (
+                <ClipView pointerEvents="none" style={GHOST_CLIP}>
+                  <DragGhost ghost={ghost} />
+                </ClipView>
+              ) : null}
+              <DropLine />
             </SidebarTextScope>
           </SidebarDropArea>
           </SidebarRowLookContext.Provider>
@@ -175,3 +181,5 @@ export function Sidebar({ width }: { width: number }) {
     </DragProvider>
   );
 }
+
+const GHOST_CLIP = { ...StyleSheet.absoluteFillObject, overflow: "hidden" } as const;
