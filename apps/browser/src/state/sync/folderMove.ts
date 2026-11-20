@@ -136,13 +136,14 @@ export async function moveChain(native: FolderMoveNative, from: string, to: stri
 }
 
 async function undoCopy(native: FolderMoveNative, to: string, written: Map<string, string[]>) {
-  let othersLeft = false;
-  for (const [scope, ids] of written) {
-    if (ids.length) await native.remove(to, scope, ids).catch(() => {});
-    const left = await native.read(to, scope, []).catch(() => null);
-    if (!left || left.files.length || left.pending.length || left.damaged.length) othersLeft = true;
+  for (const [scope, ids] of written) if (ids.length) await native.remove(to, scope, ids).catch(() => {});
+  const app = await native.read(to, APP_SCOPE, []).catch(() => null);
+  if (!app) return;
+  for (const scope of new Set([...written.keys(), ...listedProfileScopes(app.files)])) {
+    const left = scope === APP_SCOPE ? app : await native.read(to, scope, []).catch(() => null);
+    if (!left || left.files.length || left.pending.length || left.damaged.length) return;
   }
-  if (!othersLeft) await native.deleteChain(to).catch(() => {});
+  await native.deleteChain(to).catch(() => {});
 }
 
 export function folderMoveMessage(result: FolderMoveResult, label: string, previous: string): string {

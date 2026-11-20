@@ -244,3 +244,34 @@ test("turning Sync off during a move waits for the move, then turns Sync off", a
   assert.deepEqual(await moving, { ok: "moved" });
   assert.equal(engine.useSync.getState().enabled, false, "the stop isn't dropped because a move was running");
 });
+
+test("a failed copy keeps the chain when another device wrote a profile the move never copied", async () => {
+  reset();
+  plant("/old", OURS);
+  for (let n = 0; n < 4; n++) await native.write("/old", "app", `{"seq":${n}}`);
+  writeFailsAfter = 2;
+  let planted = false;
+  afterWrite = (folder) => {
+    if (folder !== "/new" || planted) return;
+    planted = true;
+    scopeOf("/new", OURS, "p:zzz").set("other-profile", '{"seq":"theirs"}');
+    scopeOf("/new", OURS, "app").set("other-app", JSON.stringify({ v: 1, kind: "log", device: "other", seq: 1, at: 1, ops: [{ k: "prof:zzz", h: "1:0:other", v: {} }] }));
+  };
+  assert.equal((await moveChain(native, "/old", "/new", ["app"])).error, "failed");
+  assert.ok(chainOf("/new").has(OURS), "the chain stays while a profile another device wrote is in it");
+  assert.deepEqual(payloads("/new", "p:zzz"), ['{"seq":"theirs"}']);
+});
+
+test("Sync Now during a move waits for the move, then runs its cycle in the new folder", async () => {
+  reset();
+  const engine = await import("./engine.ts?syncnow");
+  engine.startSync();
+  assert.ok("ok" in (await engine.turnOnSync("/home/someone/Ardia Sync", "picked")));
+  await engine.syncNow();
+  const moving = engine.moveSyncFolder("/home/someone/Nextcloud/Ardia Sync");
+  S().addBookmark({ profileId: "default", url: "https://during.example/", title: "During" });
+  assert.equal(await engine.syncNow(), true);
+  assert.deepEqual(await moving, { ok: "moved" });
+  const titles = [...chainOf("/home/someone/Nextcloud/Ardia Sync").get(OURS).values()].flatMap((files) => [...files.values()]).flatMap((payload) => JSON.parse(payload).ops ?? []).map((op) => op.v?.t);
+  assert.ok(titles.includes("During"), "the cycle Sync Now asked for ran after the move, in the new folder");
+});

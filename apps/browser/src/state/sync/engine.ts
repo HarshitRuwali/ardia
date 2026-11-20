@@ -82,7 +82,7 @@ let moveRun: Promise<FolderMoveResult> | null = null;
 export const syncWritesOpen = () => doc.enabled && !stopping && !["starting", "locked", "off", "unavailable"].includes(useSync.getState().status);
 
 export async function syncNow(stillWanted: () => void = () => {}): Promise<boolean> {
-  while (cycle) await cycle.catch(() => {});
+  while (moveRun || cycle) await (moveRun ?? cycle)!.catch(() => {});
   if (stopping || !doc.enabled || useSync.getState().status === "locked") return false;
   stillWanted();
   await runCycle({ forcePasswords: true });
