@@ -1,4 +1,4 @@
-import { SyncNative, type FolderInfo, type Listing } from "../../platform/sync";
+import { parseSyncFile, SyncNative, type FolderInfo, type Listing } from "../../platform/sync";
 import { errorText } from "../../lib/errors";
 import { onConsentPeriodChange } from "../telemetry/choice";
 import { APP_SCOPE, type SyncDoc } from "./syncDoc";
@@ -48,6 +48,7 @@ export type FolderMoveNative = {
   deleteChain(folder: string): Promise<void>;
   read(folder: string, scope: string, known: string[]): Promise<Listing>;
   write(folder: string, scope: string, payload: string): Promise<string>;
+  remove(folder: string, scope: string, ids: string[]): Promise<void>;
 };
 
 const trimmed = (path: string) => (path.length > 1 ? path.replace(/\/+$/, "") : path);
@@ -78,21 +79,32 @@ export async function pickSyncFolder(current: string | null): Promise<string | n
   return picked ? syncFolderAt(picked, (path) => native.folderInfo(path).catch(() => null)) : null;
 }
 
+export function listedProfileScopes(appFiles: Listing["files"]): string[] {
+  const scopes = new Set<string>();
+  for (const { payload } of appFiles) {
+    const file = parseSyncFile(payload);
+    const keys = !file ? [] : file.kind === "snapshot" ? Object.keys(file.records) : file.ops.map((op) => op.k);
+    for (const key of keys) if (key.startsWith(PROFILE)) scopes.add(profileScope(key.slice(PROFILE.length)));
+  }
+  return [...scopes];
+}
+
 const stillArriving = (listing: Listing) => listing.pending.length > 0 || listing.damaged.some((file) => file.age < DAMAGED_GIVEN_UP_MS);
 const sortedPayloads = (files: Listing["files"]) => files.map((file) => file.payload).sort();
 
 export async function moveChain(native: FolderMoveNative, from: string, to: string, scopes: readonly string[]): Promise<FolderMoveResult> {
   if (samePath(from, to)) return { ok: "same" };
   if (within(to, from) || within(from, to)) return { error: "nested" };
-  if ((await native.chainStatus(to)) === "ok") return { ok: "joined" };
   const target = await native.folderInfo(to);
-  if (target.hasSyncData) return { error: "otherData" };
   if (target.exists && !target.writable) return { error: "notWritable" };
+  if ((await native.chainStatus(to)) === "ok") return { ok: "joined" };
+  if (target.hasSyncData) return { error: "otherData" };
   if ((await native.chainStatus(from)) !== "ok") return { error: "unreadable" };
   const copies: [string, Listing["files"]][] = [];
   try {
-    for (const scope of scopes) {
-      const listing = await native.read(from, scope, []);
+    const app = await native.read(from, APP_SCOPE, []);
+    for (const scope of new Set([APP_SCOPE, ...scopes, ...listedProfileScopes(app.files)])) {
+      const listing = scope === APP_SCOPE ? app : await native.read(from, scope, []);
       if (stillArriving(listing)) return { error: "arriving" };
       copies.push([scope, listing.files]);
     }
@@ -104,18 +116,33 @@ export async function moveChain(native: FolderMoveNative, from: string, to: stri
   } catch (error) {
     return { error: "failed", message: errorText(error) };
   }
+  const written = new Map<string, string[]>();
   try {
-    for (const [scope, files] of copies) for (const file of files) await native.write(to, scope, file.payload);
+    for (const [scope, files] of copies) {
+      const ids: string[] = [];
+      written.set(scope, ids);
+      for (const file of files) ids.push(await native.write(to, scope, file.payload));
+    }
     for (const [scope, files] of copies) {
       const landed = sortedPayloads((await native.read(to, scope, [])).files);
       const sent = sortedPayloads(files);
       if (landed.length !== sent.length || landed.some((payload, index) => payload !== sent[index])) throw new Error("the copied files don’t match the originals");
     }
   } catch (error) {
-    await native.deleteChain(to).catch(() => {});
+    await undoCopy(native, to, written);
     return { error: "failed", message: errorText(error) };
   }
   return { ok: "moved" };
+}
+
+async function undoCopy(native: FolderMoveNative, to: string, written: Map<string, string[]>) {
+  let othersLeft = false;
+  for (const [scope, ids] of written) {
+    if (ids.length) await native.remove(to, scope, ids).catch(() => {});
+    const left = await native.read(to, scope, []).catch(() => null);
+    if (!left || left.files.length || left.pending.length || left.damaged.length) othersLeft = true;
+  }
+  if (!othersLeft) await native.deleteChain(to).catch(() => {});
 }
 
 export function folderMoveMessage(result: FolderMoveResult, label: string, previous: string): string {

@@ -23,7 +23,7 @@ import { isQuitting, saveBeforeQuit } from "../app/quit";
 import { onProfilesOpened, profileOpened } from "../profiles/profileLoading";
 import { markOpenTabsSynced, openTabsClosed, recordOpenTabCloses } from "./openTabCloses";
 import { PLATFORM_TERMS } from "../../lib/platformTerms";
-import { consentToken } from "../telemetry/client";
+import { consentToken, type ConsentToken } from "../telemetry/client";
 import { warnFor } from "../telemetry/logs";
 
 export { onTabsReceived } from "./sentTabs";
@@ -77,7 +77,7 @@ function scheduleSync(delay = AFTER_EDIT_MS) {
 }
 
 let stopping = false;
-let moving = false;
+let moveRun: Promise<FolderMoveResult> | null = null;
 
 export const syncWritesOpen = () => doc.enabled && !stopping && !["starting", "locked", "off", "unavailable"].includes(useSync.getState().status);
 
@@ -92,7 +92,7 @@ export async function syncNow(stillWanted: () => void = () => {}): Promise<boole
 type CycleOptions = { retiring?: boolean; forcePasswords?: boolean };
 
 async function runCycle({ retiring = false, forcePasswords = false }: CycleOptions = {}) {
-  if (!SyncNative || !doc.enabled || moving || !doc.folder || !doc.deviceId || useSync.getState().status === "locked") return;
+  if (!SyncNative || !doc.enabled || moveRun || !doc.folder || !doc.deviceId || useSync.getState().status === "locked") return;
   if (cycle) {
     again = true;
     forcePasswordsNext ||= forcePasswords;
@@ -231,21 +231,19 @@ export async function chooseSyncFolder(): Promise<string | null> {
   return picked;
 }
 
-export async function moveSyncFolder(to: string): Promise<FolderMoveResult> {
+export function moveSyncFolder(to: string): Promise<FolderMoveResult> {
   const native = SyncNative, from = doc.folder;
-  if (!native || !doc.enabled || !from || stopping || moving) return { error: "busy" };
-  if (useSync.getState().status === "locked") return { error: "locked" };
-  moving = true;
+  if (!native || !doc.enabled || !from || stopping || moveRun) return Promise.resolve({ error: "busy" });
+  if (useSync.getState().status === "locked") return Promise.resolve({ error: "locked" });
   clearTimeout(timer);
-  try {
-    while (cycle) await cycle.catch(() => {});
-    const result = await moveChain(native, from, to, folderScopes(doc)).catch((error: unknown): FolderMoveResult => ({ error: "failed", message: errorText(error) }));
-    if ("ok" in result && result.ok !== "same") pointAt(to);
-    return noteFolderMove(result);
-  } finally {
-    moving = false;
-    scheduleSync(0);
-  }
+  return (moveRun = movingTo(native, from, to).finally(() => ((moveRun = null), scheduleSync(0))));
+}
+
+async function movingTo(native: NonNullable<typeof SyncNative>, from: string, to: string): Promise<FolderMoveResult> {
+  while (cycle) await cycle.catch(() => {});
+  const result = await moveChain(native, from, to, folderScopes(doc)).catch((error: unknown): FolderMoveResult => ({ error: "failed", message: errorText(error) }));
+  if ("ok" in result && result.ok !== "same") pointAt(to);
+  return noteFolderMove(result);
 }
 
 function begin(folder: string, deviceId: string, joining: boolean) {
@@ -290,15 +288,15 @@ export async function enterRecoveryPhrase(folder: string, text: string): Promise
 }
 
 export async function stopSync({ deleteData = false } = {}) {
-  const native = SyncNative;
-  if (!native || !doc.enabled || stopping || moving) return;
+  const native = SyncNative, consent = consentToken();
+  while (moveRun) await moveRun.catch(() => {});
+  if (!native || !doc.enabled || stopping) return;
   stopping = true;
-  await retire(native, deleteData).finally(() => (stopping = false));
+  await retire(native, deleteData, consent).finally(() => (stopping = false));
 }
 
-async function retire(native: NonNullable<typeof SyncNative>, deleteData: boolean) {
+async function retire(native: NonNullable<typeof SyncNative>, deleteData: boolean, consent: ConsentToken | null) {
   clearTimeout(timer);
-  const consent = consentToken();
   const reportFailure = (error: unknown) => warnFor(consent, "[sync] the last cycle before stopping failed", error);
   while (cycle) await cycle.catch(reportFailure);
   if (useSync.getState().status !== "locked") await runCycle({ retiring: true }).catch(reportFailure);

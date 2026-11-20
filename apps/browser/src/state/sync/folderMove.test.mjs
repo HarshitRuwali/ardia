@@ -10,6 +10,8 @@ const OURS = "ours";
 let ids = 0;
 let writeFailsAfter = Infinity;
 const pendingIn = new Map();
+const readOnly = new Set();
+let afterWrite = () => {};
 
 const chainOf = (folder) => folders.get(folder);
 const scopeOf = (folder, chain, scope) => {
@@ -30,7 +32,7 @@ const native = {
   createPhrase: async () => true,
   unlock: async () => true,
   forget: async () => {},
-  folderInfo: async (path) => ({ path, defaultPath: "/home/someone/Ardia Sync", iCloudAvailable: true, inICloud: false, exists: folders.has(path), writable: true, hasSyncData: (chainOf(path)?.size ?? 0) > 0 }),
+  folderInfo: async (path) => ({ path, defaultPath: "/home/someone/Ardia Sync", iCloudAvailable: true, inICloud: false, exists: folders.has(path), writable: !readOnly.has(path), hasSyncData: (chainOf(path)?.size ?? 0) > 0 }),
   chooseFolder: async () => null,
   chainStatus: async (folder) => (!folders.has(folder) ? "unavailable" : chainOf(folder).has(OURS) ? "ok" : "missing"),
   createChain: async (folder) => plant(folder, OURS),
@@ -39,6 +41,7 @@ const native = {
     if (writeFailsAfter-- <= 0) throw new Error("disk full");
     const id = `f${++ids}`;
     scopeOf(folder, OURS, scope).set(id, payload);
+    afterWrite(folder, scope);
     return id;
   },
   read: async (folder, scope, known) => {
@@ -61,6 +64,8 @@ const S = () => useBrowser.getState();
 const reset = () => {
   folders.clear();
   pendingIn.clear();
+  readOnly.clear();
+  afterWrite = () => {};
   writeFailsAfter = Infinity;
   shell.docs.clear();
   S().hydrate({});
@@ -188,4 +193,54 @@ test("each move outcome has a message that says where sync is now", () => {
   assert.match(folderMoveMessage({ ok: "moved" }, "~/Nextcloud/Ardia Sync", "~/Ardia Sync"), /Sync now uses ~\/Nextcloud\/Ardia Sync\. The old folder at ~\/Ardia Sync stays/);
   assert.match(folderMoveMessage({ error: "otherData" }, "x", "y"), /different recovery phrase/);
   assert.match(folderMoveMessage({ error: "failed", message: "disk full" }, "x", "~/Ardia Sync"), /disk full\. Sync still uses ~\/Ardia Sync/);
+});
+
+test("a profile another device added since the last cycle moves too: the move reads the profiles from the old folder's app scope", async () => {
+  reset();
+  plant("/old", OURS);
+  const record = { h: "1:0:dev", v: {}, o: ["dev", 1] };
+  await native.write("/old", "app", JSON.stringify({ v: 1, kind: "snapshot", device: "dev", at: 1, vv: { dev: 1 }, seen: {}, records: { "prof:bbb": record } }));
+  await native.write("/old", "app", JSON.stringify({ v: 1, kind: "log", device: "dev", seq: 2, at: 2, ops: [{ k: "prof:ccc", h: "2:0:dev", v: {} }] }));
+  await native.write("/old", "p:bbb", '{"kind":"log","seq":1}');
+  await native.write("/old", "p:ccc", '{"kind":"log","seq":1}');
+  assert.deepEqual(await moveChain(native, "/old", "/new", ["app"]), { ok: "moved" });
+  assert.deepEqual(payloads("/new", "p:bbb"), payloads("/old", "p:bbb"), "a profile only a snapshot names is copied");
+  assert.deepEqual(payloads("/new", "p:ccc"), payloads("/old", "p:ccc"), "a profile only a log names is copied");
+});
+
+test("a folder that holds this chain but can't be written is refused instead of joined", async () => {
+  reset();
+  plant("/old", OURS);
+  plant("/read-only", OURS);
+  readOnly.add("/read-only");
+  assert.deepEqual(await moveChain(native, "/old", "/read-only", ["app"]), { error: "notWritable" });
+});
+
+test("a failed copy removes only the files it wrote: a file another device wrote meanwhile, and the chain, stay", async () => {
+  reset();
+  plant("/old", OURS);
+  for (let n = 0; n < 4; n++) await native.write("/old", "app", `{"seq":${n}}`);
+  writeFailsAfter = 2;
+  let planted = false;
+  afterWrite = (folder, scope) => {
+    if (folder !== "/new" || planted) return;
+    planted = true;
+    scopeOf("/new", OURS, scope).set("other-device", '{"seq":"theirs"}');
+  };
+  assert.equal((await moveChain(native, "/old", "/new", ["app"])).error, "failed");
+  assert.ok(chainOf("/new").has(OURS), "the chain stays while another device's file is in it");
+  assert.deepEqual(payloads("/new", "app"), ['{"seq":"theirs"}']);
+});
+
+test("turning Sync off during a move waits for the move, then turns Sync off", async () => {
+  reset();
+  const engine = await import("./engine.ts?stop");
+  engine.startSync();
+  assert.ok("ok" in (await engine.turnOnSync("/home/someone/Ardia Sync", "picked")));
+  S().addBookmark({ profileId: "default", url: "https://before.example/", title: "Before" });
+  await engine.syncNow();
+  const moving = engine.moveSyncFolder("/home/someone/Nextcloud/Ardia Sync");
+  await engine.stopSync();
+  assert.deepEqual(await moving, { ok: "moved" });
+  assert.equal(engine.useSync.getState().enabled, false, "the stop isn't dropped because a move was running");
 });

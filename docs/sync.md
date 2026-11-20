@@ -482,7 +482,9 @@ Settings › Sync. Dia puts sync in Account › Sync, with the section icon
   Below is the sync folder, with Choose…. If iCloud Drive is off it says so, links to iCloud
   settings, and offers another folder; test instances never default to iCloud Drive.
   On Linux there's no cloud drive to default to: until a folder is chosen, the button is **Turn On…**, which asks
-  where the folder goes and makes an `Ardia Sync` folder inside the one picked (`docs/linux-port.md` › Sync).
+  where the folder goes and makes an `Ardia Sync` folder inside the one picked. Two picks are used as they are: a
+  folder already named `Ardia Sync`, and a folder that already holds sync data, which goes to **Enter Recovery
+  Phrase…** instead of starting a second chain (`docs/linux-port.md` › Sync).
 - **Turn On Sync** makes a phrase and shows **Save Your Recovery Kit**, with Dia's copy:
   - "Your Recovery Kit contains all you need to recover your data should you lose access to
     this device."
