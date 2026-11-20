@@ -1337,12 +1337,12 @@ Linux reads calendars from Evolution Data Server, which GNOME Online Accounts, G
   failed copy removes the files it wrote and keeps the new chain, empty: deleting a chain is recursive, so it could
   take a file another device wrote there after any check. A later move into that folder completes the chain instead of
   pointing at it, since it lacks the old folder's files. The cleanup is best effort: if a removal fails, part of the
-  copy can stay in the new folder, which Sync doesn't use. Files still downloading into the current folder refuse a
-  copy; a folder that already holds this chain is pointed at without one. Turning Sync off or Sync Now during a move
-  waits for the move, then runs. The old folder stays as it was, because other devices may still sync through it. When
-  the old folder is gone, a folder holding this chain with files in it is pointed at and an empty one refused.
-  Pointing at the folder after moving it by hand in a file manager is that re-point, so Sync going offline after such
-  a move is fixed from here too.
+  copy can stay in the new folder, which Sync doesn't use. Files still downloading into the current folder refuse the
+  move whenever that folder can be read, before the new folder is compared, since the move can't tell yet whether the
+  new folder holds them. Turning Sync off or Sync Now during a move waits for the move, then runs. The old folder
+  stays as it was, because other devices may still sync through it. When the old folder is gone, a folder holding this
+  chain with files in it is pointed at and an empty one refused. Pointing at the folder after moving it by hand in a
+  file manager is that re-point, so Sync going offline after such a move is fixed from here too.
 - **Key.** The sync key is a Secret Service item, "Ardia Sync Key" (schema `dev.ardia.linux.SyncKey`). Showing,
   copying or saving the recovery words asks polkit, then allows 60 s.
 - **One authority.** Only one browser renderer syncs: it holds a Web Lock plus a native lease that expires 30 s after
