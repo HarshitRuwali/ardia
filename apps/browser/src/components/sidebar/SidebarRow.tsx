@@ -1,6 +1,6 @@
-import { memo, useMemo, type ReactNode } from "react";
+import { memo, useContext, useMemo, type ReactNode } from "react";
 import { StyleSheet, View, type StyleProp, type ViewStyle } from "react-native";
-import { FadeLabel, perLook, radius, sidebarLineHeight, Surface, type SurfaceProps } from "../ui";
+import { drawnFadeLabel, perLook, radius, sidebarLineHeight, Surface, TextScopeContext, type SurfaceProps } from "../ui";
 import { hex, layout, useTheme } from "../ui/theme";
 import { useSelectedTabGlow } from "./rowLook";
 import { SELECTED_ROW_SHADOW_OFFSET, SIDEBAR_TYPE, SLEEPING_TITLE_OPACITY, TAB_ROW } from "./tokens";
@@ -28,10 +28,41 @@ export function SidebarRowSurface({
   padRight?: number;
   children: SurfaceProps["children"];
 }) {
+  const surface = useRowSurfaceLayer({ fill, selected, border, stroke, cornerRadius });
+  return (
+    <View style={rowSurfaceFrame(padLeft, padRight)}>
+      {surface}
+      {children}
+    </View>
+  );
+}
+
+const surfaceFrames = new Map<string, ViewStyle>();
+
+export function rowSurfaceFrame(padLeft: number = TAB_ROW.contentLeft, padRight: number = TAB_ROW.trailing): ViewStyle {
+  const key = `${layout.rowHeight}:${padLeft}:${padRight}`;
+  let frame = surfaceFrames.get(key);
+  if (!frame) surfaceFrames.set(key, (frame = { height: layout.rowHeight, flexDirection: "row", alignItems: "center", paddingLeft: padLeft, paddingRight: padRight }));
+  return frame;
+}
+
+export function useRowSurfaceLayer({
+  fill,
+  selected = false,
+  border = 0,
+  stroke,
+  cornerRadius = radius.chrome,
+}: {
+  fill: string;
+  selected?: boolean;
+  border?: number;
+  stroke?: string;
+  cornerRadius?: number;
+}) {
   const theme = useTheme();
   const { shadowColor, shadowOpacity, shadowRadius } = useSelectedTabGlow();
   const selectedBorder = theme.tabSelectedBorder;
-  const surface = useMemo(
+  return useMemo(
     () => (
       <Surface
         pointerEvents="none"
@@ -49,18 +80,13 @@ export function SidebarRowSurface({
     ),
     [fill, cornerRadius, border, stroke, selected, selectedBorder, shadowColor, shadowOpacity, shadowRadius],
   );
-  return (
-    <View style={{ height: layout.rowHeight, flexDirection: "row", alignItems: "center", paddingLeft: padLeft, paddingRight: padRight }}>
-      {surface}
-      {children}
-    </View>
-  );
 }
 
 export const SidebarRowLabel = memo(function SidebarRowLabel({ text, color, weight, compact = false, struck = false }: { text: string; color: string; weight?: "medium" | "regular"; compact?: boolean; struck?: boolean }) {
   useTheme();
+  const inSidebar = useContext(TextScopeContext) === "sidebar";
   const frame = compact ? compactTitleFrame() : rowTitleFrame();
-  return <FadeLabel text={text} fontSize={compact ? SIDEBAR_TYPE.compact : SIDEBAR_TYPE.title} weight={weight} color={color} strikethrough={struck} style={struck ? [frame, SLEEPING_TITLE] : frame} />;
+  return drawnFadeLabel({ text, fontSize: compact ? SIDEBAR_TYPE.compact : SIDEBAR_TYPE.title, weight, color, strikethrough: struck, style: struck ? [frame, SLEEPING_TITLE] : frame }, inSidebar);
 });
 
 const SLEEPING_TITLE = { opacity: SLEEPING_TITLE_OPACITY } as const;
