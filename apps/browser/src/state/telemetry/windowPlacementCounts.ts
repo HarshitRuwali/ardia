@@ -1,6 +1,6 @@
 import { onAppEvent } from "../../platform/app";
 import { isSharing } from "./choice";
-import { capture, counted } from "./client";
+import { counted } from "./client";
 import type { ConsentToken } from "./consentPeriod";
 import { nativeConsent } from "./nativeConsent";
 
@@ -24,7 +24,6 @@ onAppEvent((e) => {
       else if (type === "windowTitleRead") titlesRead++;
       else dragLoops++;
     },
-    () => capture("usage_counts", { [FIELDS[type]]: 1 }, null),
   );
 });
 
