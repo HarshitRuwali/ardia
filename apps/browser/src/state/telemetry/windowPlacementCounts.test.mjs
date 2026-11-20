@@ -87,3 +87,24 @@ test("window titles read and Option resizes from while sharing was off are never
   await client.saveQueueNow();
   assert.deepEqual([sent().at(-1).properties.window_titles_read, sent().at(-1).properties.window_centered_resizes], [1, 1]);
 });
+
+test("Little Ardia and utility windows opened floating are counted apart, sent with usage_counts, and not counted while sharing is off", async () => {
+  client.loadChoice();
+  client.setSharing(true, "onboarding");
+  const sentFloating = async () => {
+    await client.saveQueueNow();
+    const saved = JSON.parse(stub.docs.get("telemetry-queue.json") ?? '{"events":[]}');
+    return saved.events.filter((e) => e.event === "usage_counts").map((e) => [e.properties.little_ardia_opened_floating, e.properties.utility_windows_opened_floating]);
+  };
+
+  placement.noteWindowOpenedFloating(true);
+  placement.noteWindowOpenedFloating(true);
+  placement.noteWindowOpenedFloating(false);
+  usage.sessionEnding();
+  assert.deepEqual((await sentFloating()).at(-1), [2, 1]);
+
+  client.setSharing(false, "settings");
+  placement.noteWindowOpenedFloating(true);
+  client.setSharing(true, "settings");
+  assert.deepEqual(placement.takeWindowPlacementCounts(), { window_centered_resizes: 0, windows_reopened_maximized: 0, window_titles_read: 0, window_drag_loops: 0, little_ardia_opened_floating: 0, utility_windows_opened_floating: 0 });
+});

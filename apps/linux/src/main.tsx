@@ -42,6 +42,7 @@ import { startHostConfig } from "./hostConfig";
 import { COMMANDS } from "../../browser/src/state/commands/commandCatalog";
 import { opensOnCommandBar } from "./hostSmallWindows";
 import { hydrateLaunchSession, linuxSessionShape, startHostPersistence } from "./hostSession";
+import { noteWindowOpenedFloating } from "../../browser/src/state/telemetry/windowPlacementCounts";
 import { startHostData } from "./hostData";
 import { startHostDownloads } from "./hostDownloads";
 import { startHostTabLifecycle } from "./hostTabLifecycle";
@@ -114,6 +115,7 @@ async function start() {
   followWindowMaximized(ardiaHost, windowId);
   startConfigFiles(colorRoles, launch);
   startHostTelemetry({ host: ardiaHost, candidate: !utility, locks: navigator.locks as unknown as LeaderLocks });
+  if (ardiaHost.bootstrap.openedFloating) noteWindowOpenedFloating(!utility);
   countLoginPasswordChecks(linuxTelemetryHooks.leading);
   const capabilities = linuxCapabilities(ardiaHost);
   if (capabilities.cliControl) startCliControl();
