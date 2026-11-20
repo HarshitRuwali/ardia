@@ -111,3 +111,16 @@ test("Little Ardia and utility windows opened floating are counted apart, sent w
   placement.noteWindowOpenedFloating(true, before);
   assert.deepEqual(placement.takeWindowPlacementCounts(), { window_centered_resizes: 0, windows_reopened_maximized: 0, window_titles_read: 0, window_drag_loops: 0, window_close_pins_kept: 0, little_ardia_opened_floating: 0, utility_windows_opened_floating: 0 });
 });
+
+test("floating windows counted in one consent period are dropped when the period changes, not reported in the next", async () => {
+  client.loadChoice();
+  client.setSharing(true, "onboarding");
+  const consent = (await import("./consentPeriod.ts")).consentToken;
+  placement.takeWindowPlacementCounts();
+  placement.noteWindowOpenedFloating(true, consent());
+  placement.noteWindowOpenedFloating(false, consent());
+  client.setSharing(false, "settings");
+  client.setSharing(true, "settings");
+  const taken = placement.takeWindowPlacementCounts();
+  assert.deepEqual([taken.little_ardia_opened_floating, taken.utility_windows_opened_floating], [0, 0]);
+});
