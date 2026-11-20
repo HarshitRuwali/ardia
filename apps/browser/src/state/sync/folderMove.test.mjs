@@ -11,6 +11,7 @@ let ids = 0;
 let writeFailsAfter = Infinity;
 const pendingIn = new Map();
 const readOnly = new Set();
+const unreadable = new Set();
 let afterWrite = () => {};
 
 const chainOf = (folder) => folders.get(folder);
@@ -48,7 +49,7 @@ const native = {
     return id;
   },
   read: async (folder, scope, known) => {
-    if (!chainOf(folder)?.has(OURS)) throw new Error(`no chain in ${folder}`);
+    if (!chainOf(folder)?.has(OURS) || unreadable.has(folder)) throw new Error(`no chain in ${folder}`);
     const here = [...(chainOf(folder).get(OURS).get(scope) ?? [])];
     const pending = pendingIn.get(`${folder}|${scope}`) ?? [];
     return { files: here.filter(([id]) => !known.includes(id)).map(([id, payload]) => ({ id, payload })), pending, damaged: [], present: here.map(([id]) => id) };
@@ -68,6 +69,7 @@ const reset = () => {
   folders.clear();
   pendingIn.clear();
   readOnly.clear();
+  unreadable.clear();
   afterWrite = () => {};
   writeFailsAfter = Infinity;
   shell.docs.clear();
@@ -285,4 +287,37 @@ test("Sync Now during a move waits for the move, then runs its cycle in the new 
   assert.deepEqual(await moving, { ok: "moved" });
   const titles = [...chainOf("/home/someone/Nextcloud/Ardia Sync").get(OURS).values()].flatMap((files) => [...files.values()]).flatMap((payload) => JSON.parse(payload).ops ?? []).map((op) => op.v?.t);
   assert.ok(titles.includes("During"), "the cycle Sync Now asked for ran after the move, in the new folder");
+});
+
+test("a chain that holds only part of the old folder's files is completed, not joined", async () => {
+  reset();
+  plant("/old", OURS);
+  for (let n = 0; n < 4; n++) await native.write("/old", "app", `{"seq":${n}}`);
+  plant("/partial", OURS);
+  await native.write("/partial", "app", '{"seq":0}');
+  await native.write("/partial", "app", '{"seq":1}');
+  assert.deepEqual(await moveChain(native, "/old", "/partial", ["app"]), { ok: "moved" });
+  assert.deepEqual(payloads("/partial", "app"), payloads("/old", "app"), "only the missing files are written, so nothing is doubled");
+  assert.deepEqual(await moveChain(native, "/old", "/partial", ["app"]), { ok: "joined" }, "a complete chain is pointed at");
+});
+
+test("a retry whose read of the new folder fails is a failed move, not a join", async () => {
+  reset();
+  plant("/old", OURS);
+  for (let n = 0; n < 4; n++) await native.write("/old", "app", `{"seq":${n}}`);
+  writeFailsAfter = 2;
+  assert.equal((await moveChain(native, "/old", "/new", ["app"])).error, "failed");
+  writeFailsAfter = Infinity;
+  unreadable.add("/new");
+  const retry = await moveChain(native, "/old", "/new", ["app"]);
+  assert.equal(retry.error, "failed", "Sync keeps the old folder");
+});
+
+test("when the old folder is gone, a folder with this chain's files is pointed at, and an empty one is refused", async () => {
+  reset();
+  plant("/moved-by-hand", OURS);
+  await native.write("/moved-by-hand", "app", '{"seq":1}');
+  plant("/empty", OURS);
+  assert.deepEqual(await moveChain(native, "/gone", "/moved-by-hand", ["app"]), { ok: "joined" });
+  assert.deepEqual(await moveChain(native, "/gone", "/empty", ["app"]), { error: "unreadable" });
 });

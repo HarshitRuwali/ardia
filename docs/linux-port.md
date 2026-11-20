@@ -1329,17 +1329,20 @@ Linux reads calendars from Evolution Data Server, which GNOME Online Accounts, G
 - **Moving.** While Sync is on, Settings › Sync › Sync Folder › Move… (also Advanced… › Move Sync Folder…) moves it
   (`PLATFORM_FEATURES.movesSyncFolder`). The sync window holds its cycles, then: a folder inside the current folder or
   holding it, or one with another phrase's data, is refused; so is a folder that can't be written; a folder that
-  already holds this phrase's chain with data in it is only pointed at; otherwise every file of this chain is read and
-  written into the new folder through the native calls, checked against the originals, and only then does sync use it.
-  The scopes copied are the ones known here plus every profile the old folder's own app scope names
-  (`listedProfileScopes`), so a profile another device added since the last cycle moves too. A failed copy removes the
-  files it wrote and keeps the new chain, empty: deleting a chain is recursive, so it could take a file another device
-  wrote there after any check. A later move into that folder copies into the empty chain instead of pointing at it.
-  The cleanup is best effort: if a removal fails, part of the copy can stay in the new folder, which Sync doesn't use.
-  Files still downloading into the current folder refuse a copy; a folder that already holds this chain is pointed at
-  without one. Turning Sync off or Sync Now during a move waits for the move, then runs. The old folder stays as it
-  was, because other devices may still sync through it. Pointing at the folder after moving it by hand in a file
-  manager is the same re-point, so Sync going offline after such a move is fixed from here too.
+  already holds this phrase's chain and every file of the old one is only pointed at; otherwise the files of this
+  chain the new folder lacks are read and written into it through the native calls (into its existing chain, if it has
+  one), the new folder is checked to hold every file of the old one, and only then does sync use it. A read of the new
+  folder that fails is a failed move. The scopes copied are the ones known here plus every profile the old folder's
+  own app scope names (`listedProfileScopes`), so a profile another device added since the last cycle moves too. A
+  failed copy removes the files it wrote and keeps the new chain, empty: deleting a chain is recursive, so it could
+  take a file another device wrote there after any check. A later move into that folder completes the chain instead of
+  pointing at it, since it lacks the old folder's files. The cleanup is best effort: if a removal fails, part of the
+  copy can stay in the new folder, which Sync doesn't use. Files still downloading into the current folder refuse a
+  copy; a folder that already holds this chain is pointed at without one. Turning Sync off or Sync Now during a move
+  waits for the move, then runs. The old folder stays as it was, because other devices may still sync through it. When
+  the old folder is gone, a folder holding this chain with files in it is pointed at and an empty one refused.
+  Pointing at the folder after moving it by hand in a file manager is that re-point, so Sync going offline after such
+  a move is fixed from here too.
 - **Key.** The sync key is a Secret Service item, "Ardia Sync Key" (schema `dev.ardia.linux.SyncKey`). Showing,
   copying or saving the recovery words asks polkit, then allows 60 s.
 - **One authority.** Only one browser renderer syncs: it holds a Web Lock plus a native lease that expires 30 s after

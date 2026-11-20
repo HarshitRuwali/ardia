@@ -89,7 +89,6 @@ export function listedProfileScopes(appFiles: Listing["files"]): string[] {
 }
 
 const stillArriving = (listing: Listing) => listing.pending.length > 0 || listing.damaged.some((file) => file.age < DAMAGED_GIVEN_UP_MS);
-const sortedPayloads = (files: Listing["files"]) => files.map((file) => file.payload).sort();
 
 export async function moveChain(native: FolderMoveNative, from: string, to: string, scopes: readonly string[]): Promise<FolderMoveResult> {
   if (samePath(from, to)) return { ok: "same" };
@@ -98,8 +97,7 @@ export async function moveChain(native: FolderMoveNative, from: string, to: stri
   const ours = (await native.chainStatus(to)) === "ok";
   if (!ours && target.hasSyncData) return { error: "otherData" };
   if (target.exists && !target.writable) return { error: "notWritable" };
-  if (ours && !(await emptyChain(native, to))) return { ok: "joined" };
-  if ((await native.chainStatus(from)) !== "ok") return { error: "unreadable" };
+  if ((await native.chainStatus(from)) !== "ok") return ours && (await native.read(to, APP_SCOPE, [])).present.length ? { ok: "joined" } : { error: "unreadable" };
   const copies: [string, Listing["files"]][] = [];
   try {
     const app = await native.read(from, APP_SCOPE, []);
@@ -111,23 +109,23 @@ export async function moveChain(native: FolderMoveNative, from: string, to: stri
   } catch {
     return { error: "unreadable" };
   }
+  let missing: [string, string[]][];
   try {
     if (!ours) await native.createChain(to);
+    missing = ours ? await missingFrom(native, to, copies) : copies.map(([scope, files]) => [scope, files.map((file) => file.payload)]);
   } catch (error) {
     return { error: "failed", message: errorText(error) };
   }
+  if (ours && missing.every(([, payloads]) => !payloads.length)) return { ok: "joined" };
   const written = new Map<string, string[]>();
   try {
-    for (const [scope, files] of copies) {
+    for (const [scope, payloads] of missing) {
       const ids: string[] = [];
       written.set(scope, ids);
-      for (const file of files) ids.push(await native.write(to, scope, file.payload));
+      for (const payload of payloads) ids.push(await native.write(to, scope, payload));
     }
-    for (const [scope, files] of copies) {
-      const landed = sortedPayloads((await native.read(to, scope, [])).files);
-      const sent = sortedPayloads(files);
-      if (landed.length !== sent.length || landed.some((payload, index) => payload !== sent[index])) throw new Error("the copied files don’t match the originals");
-    }
+    const left = await missingFrom(native, to, copies);
+    if (left.some(([, payloads]) => payloads.length)) throw new Error("the copied files don’t match the originals");
   } catch (error) {
     await undoCopy(native, to, written);
     return { error: "failed", message: errorText(error) };
@@ -135,13 +133,17 @@ export async function moveChain(native: FolderMoveNative, from: string, to: stri
   return { ok: "moved" };
 }
 
-async function undoCopy(native: FolderMoveNative, to: string, written: Map<string, string[]>) {
-  for (const [scope, ids] of written) if (ids.length) await native.remove(to, scope, ids).catch(() => {});
+async function missingFrom(native: FolderMoveNative, folder: string, copies: [string, Listing["files"]][]): Promise<[string, string[]][]> {
+  const missing: [string, string[]][] = [];
+  for (const [scope, files] of copies) {
+    const there = new Set((await native.read(folder, scope, [])).files.map((file) => file.payload));
+    missing.push([scope, files.map((file) => file.payload).filter((payload) => !there.has(payload))]);
+  }
+  return missing;
 }
 
-async function emptyChain(native: FolderMoveNative, folder: string) {
-  const app = await native.read(folder, APP_SCOPE, []).catch(() => null);
-  return !!app && !app.present.length && !app.pending.length && !app.damaged.length;
+async function undoCopy(native: FolderMoveNative, to: string, written: Map<string, string[]>) {
+  for (const [scope, ids] of written) if (ids.length) await native.remove(to, scope, ids).catch(() => {});
 }
 
 export function folderMoveMessage(result: FolderMoveResult, label: string, previous: string): string {
