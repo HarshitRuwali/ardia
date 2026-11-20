@@ -1,6 +1,7 @@
 import { onAppEvent } from "../../platform/app";
 import { isSharing } from "./choice";
 import { capture, counted } from "./client";
+import type { ConsentToken } from "./consentPeriod";
 import { nativeConsent } from "./nativeConsent";
 
 let centeredResizes = 0;
@@ -28,10 +29,8 @@ onAppEvent((e) => {
 
 export const noteWindowReopenedMaximized = () => void (isSharing() && reopenedMaximized++);
 
-export function noteWindowOpenedFloating(little: boolean) {
-  if (!isSharing()) return;
-  if (little) littleOpenedFloating++;
-  else utilityOpenedFloating++;
+export function noteWindowOpenedFloating(little: boolean, consent: ConsentToken | null) {
+  counted(consent, () => (little ? littleOpenedFloating++ : utilityOpenedFloating++));
 }
 
 export function takeWindowPlacementCounts() {
