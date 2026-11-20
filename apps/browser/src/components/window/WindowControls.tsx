@@ -69,6 +69,8 @@ export type WindowControlsProps = {
   leading?: boolean;
 };
 
+export const controlsShown = windowControlsDrawn();
+
 export const useControlsShown = (): boolean => {
   useWindowButtonStyle();
   return windowControlsDrawn();
