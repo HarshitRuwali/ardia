@@ -1738,6 +1738,7 @@ class ShellHostView : public views::View,
   gfx::RoundedCornersF utility_corners_;
   base::OneShotTimer curtain_timer_;
   base::OneShotTimer pinned_size_timer_;
+  base::TimeTicks pinned_at_;
   raw_ptr<HostMessageHandler> handler_ = nullptr;
   uint64_t renderer_generation_ = 0;
   std::optional<uint64_t> live_generation_;
@@ -2685,6 +2686,7 @@ void ShellHostView::Initialize() {
     presented_ = true;
   }
   if (pinned_) {
+    pinned_at_ = base::TimeTicks::Now();
     pinned_size_timer_.Start(FROM_HERE, presented_ ? base::TimeDelta() : base::Milliseconds(linux_window::kPinnedSizeLimitMs),
                              base::BindOnce(&ShellHostView::ReleasePinnedSize, base::Unretained(this)));
   }
@@ -4499,7 +4501,8 @@ void ShellHostView::OnDidPresentCompositorFrame(ui::Compositor*, uint32_t, const
   presentation_observation_.Reset();
   presented_ = true;
   if (pinned_) {
-    pinned_size_timer_.Start(FROM_HERE, base::Milliseconds(linux_window::kPinnedSizeHoldMs),
+    const int64_t pinned_for = (base::TimeTicks::Now() - pinned_at_).InMilliseconds();
+    pinned_size_timer_.Start(FROM_HERE, base::Milliseconds(linux_window::PinnedSizeReleaseDelayMs(pinned_for)),
                              base::BindOnce(&ShellHostView::ReleasePinnedSize, base::Unretained(this)));
   }
   RestoreFullScreenNow();

@@ -117,6 +117,7 @@ inline constexpr int64_t kPinnedSizeLimitMs = 3000;
 
 const char* WindowClass(std::string_view kind, bool small);
 bool OpensPinned(std::string_view kind, bool small, bool maximized);
+int64_t PinnedSizeReleaseDelayMs(int64_t pinned_for_ms);
 
 class GeometryLedger {
  public:

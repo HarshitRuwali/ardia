@@ -33,6 +33,11 @@ int main() {
   assert(!OpensPinned("settings", false, true));
   assert(!OpensPinned("", true, true));
   assert(kPinnedSizeHoldMs > 0 && kPinnedSizeHoldMs < kPinnedSizeLimitMs);
+  assert(PinnedSizeReleaseDelayMs(0) == kPinnedSizeHoldMs);
+  assert(PinnedSizeReleaseDelayMs(kPinnedSizeLimitMs - kPinnedSizeHoldMs) == kPinnedSizeHoldMs);
+  assert(PinnedSizeReleaseDelayMs(2900) == 100);
+  assert(PinnedSizeReleaseDelayMs(kPinnedSizeLimitMs) == 0);
+  assert(PinnedSizeReleaseDelayMs(kPinnedSizeLimitMs + 500) == 0);
   return 0;
 }
 '''
@@ -174,7 +179,8 @@ class FloatingWindowHostTests(unittest.TestCase):
 
     def test_the_pin_lets_go_after_the_window_is_presented_or_the_limit(self):
         presented = self.section('void ShellHostView::OnDidPresentCompositorFrame(', 'void ShellHostView::OnWidgetActivationChanged(')
-        self.assertIn('base::Milliseconds(linux_window::kPinnedSizeHoldMs)', presented)
+        self.assertIn('base::Milliseconds(linux_window::PinnedSizeReleaseDelayMs(pinned_for))', presented)
+        self.assertIn('pinned_at_ = base::TimeTicks::Now();', self.section('void ShellHostView::Initialize() {', 'SeedWindowActivation();'))
         initialize = self.section('void ShellHostView::Initialize() {', 'SeedWindowActivation();')
         self.assertIn('presented_ ? base::TimeDelta() : base::Milliseconds(linux_window::kPinnedSizeLimitMs)', initialize)
         release = self.section('void ReleasePinnedSize() {', 'void set_small(bool small) {')
