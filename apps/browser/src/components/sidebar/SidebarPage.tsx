@@ -154,14 +154,19 @@ export const SidebarPage = memo(function SidebarPage({ profileId, slot, paging, 
   );
   const edge = useMemo(() => scrollY.interpolate({ inputRange: [0, 1], outputRange: [0, GLOW_ROOM - edgeLift], extrapolate: "clamp" }), [scrollY, edgeLift]);
   const unedge = useMemo(() => Animated.multiply(edge, -1), [edge]);
-  const onSlack = (e: LayoutChangeEvent) => {
-    if (resting || !canDock || height <= 0) return;
-    const filler = e.nativeEvent.layout.height;
-    const next = dockedAfter(docked, filler, playerTab && playerMotion.expandedSlot.current ? SIDEBAR_PLAYER_GROWTH : 0);
+  const slack = useRef<number | null>(null);
+  const applySlack = () => {
+    if (resting || !canDock || height <= 0 || slack.current === null) return;
+    const next = dockedAfter(docked, slack.current, playerTab && playerMotion.expandedSlot.current ? SIDEBAR_PLAYER_GROWTH : 0);
     if (next === docked) return;
     setDockedNow(next);
     if (current) noteNewTabDocked(next);
   };
+  const onSlack = (e: LayoutChangeEvent) => {
+    slack.current = e.nativeEvent.layout.height;
+    applySlack();
+  };
+  useEffect(applySlack, [height > 0, canDock, resting]);
   const inlineNewTab = !docked && newTabShown;
 
   return (
