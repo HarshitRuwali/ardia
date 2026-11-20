@@ -45,7 +45,6 @@ export type FolderMoveNative = {
   folderInfo(path: string | null): Promise<FolderInfo>;
   chainStatus(folder: string): Promise<"ok" | "missing" | "unavailable">;
   createChain(folder: string): Promise<void>;
-  deleteChain(folder: string): Promise<void>;
   read(folder: string, scope: string, known: string[]): Promise<Listing>;
   write(folder: string, scope: string, payload: string): Promise<string>;
   remove(folder: string, scope: string, ids: string[]): Promise<void>;
@@ -96,9 +95,10 @@ export async function moveChain(native: FolderMoveNative, from: string, to: stri
   if (samePath(from, to)) return { ok: "same" };
   if (within(to, from) || within(from, to)) return { error: "nested" };
   const target = await native.folderInfo(to);
+  const ours = (await native.chainStatus(to)) === "ok";
+  if (!ours && target.hasSyncData) return { error: "otherData" };
   if (target.exists && !target.writable) return { error: "notWritable" };
-  if ((await native.chainStatus(to)) === "ok") return { ok: "joined" };
-  if (target.hasSyncData) return { error: "otherData" };
+  if (ours && !(await emptyChain(native, to))) return { ok: "joined" };
   if ((await native.chainStatus(from)) !== "ok") return { error: "unreadable" };
   const copies: [string, Listing["files"]][] = [];
   try {
@@ -112,7 +112,7 @@ export async function moveChain(native: FolderMoveNative, from: string, to: stri
     return { error: "unreadable" };
   }
   try {
-    await native.createChain(to);
+    if (!ours) await native.createChain(to);
   } catch (error) {
     return { error: "failed", message: errorText(error) };
   }
@@ -137,13 +137,11 @@ export async function moveChain(native: FolderMoveNative, from: string, to: stri
 
 async function undoCopy(native: FolderMoveNative, to: string, written: Map<string, string[]>) {
   for (const [scope, ids] of written) if (ids.length) await native.remove(to, scope, ids).catch(() => {});
-  const app = await native.read(to, APP_SCOPE, []).catch(() => null);
-  if (!app) return;
-  for (const scope of new Set([...written.keys(), ...listedProfileScopes(app.files)])) {
-    const left = scope === APP_SCOPE ? app : await native.read(to, scope, []).catch(() => null);
-    if (!left || left.files.length || left.pending.length || left.damaged.length) return;
-  }
-  await native.deleteChain(to).catch(() => {});
+}
+
+async function emptyChain(native: FolderMoveNative, folder: string) {
+  const app = await native.read(folder, APP_SCOPE, []).catch(() => null);
+  return !!app && !app.present.length && !app.pending.length && !app.damaged.length;
 }
 
 export function folderMoveMessage(result: FolderMoveResult, label: string, previous: string): string {

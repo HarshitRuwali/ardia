@@ -35,7 +35,10 @@ const native = {
   folderInfo: async (path) => ({ path, defaultPath: "/home/someone/Ardia Sync", iCloudAvailable: true, inICloud: false, exists: folders.has(path), writable: !readOnly.has(path), hasSyncData: (chainOf(path)?.size ?? 0) > 0 }),
   chooseFolder: async () => null,
   chainStatus: async (folder) => (!folders.has(folder) ? "unavailable" : chainOf(folder).has(OURS) ? "ok" : "missing"),
-  createChain: async (folder) => plant(folder, OURS),
+  createChain: async (folder) => {
+    if (chainOf(folder)?.has(OURS)) throw new Error("the chain already exists");
+    plant(folder, OURS);
+  },
   deleteChain: async (folder) => void chainOf(folder)?.delete(OURS),
   write: async (folder, scope, payload) => {
     if (writeFailsAfter-- <= 0) throw new Error("disk full");
@@ -106,6 +109,7 @@ test("pointing at a folder that already holds this chain only re-points, and a f
   reset();
   plant("/old", OURS);
   plant("/copied-by-hand", OURS);
+  await native.write("/copied-by-hand", "app", '{"seq":1}');
   plant("/someone-elses", "theirs");
   assert.deepEqual(await moveChain(native, "/old", "/copied-by-hand", ["app"]), { ok: "joined" });
   assert.deepEqual(await moveChain(native, "/old", "/someone-elses", ["app"]), { error: "otherData" });
@@ -132,8 +136,12 @@ test("a copy that fails halfway removes what it wrote and keeps the old folder i
   const result = await moveChain(native, "/old", "/new", ["app"]);
   assert.equal(result.error, "failed");
   assert.match(result.message, /disk full/);
-  assert.equal(chainOf("/new").has(OURS), false, "the half copy is removed, so no device can join a partial chain");
+  assert.deepEqual(payloads("/new", "app"), [], "every file the copy wrote is removed");
+  assert.ok(chainOf("/new").has(OURS), "the chain is kept: deleting it could take a file another device wrote after any check");
   assert.equal(payloads("/old", "app").length, 4);
+  writeFailsAfter = Infinity;
+  assert.deepEqual(await moveChain(native, "/old", "/new", ["app"]), { ok: "moved" }, "an empty chain left by a failed copy is copied into, not joined");
+  assert.deepEqual(payloads("/new", "app"), payloads("/old", "app"));
 });
 
 test("the engine moves the folder while sync is on: later batches land in the new folder and the cycle keeps syncing", async () => {
@@ -214,6 +222,9 @@ test("a folder that holds this chain but can't be written is refused instead of 
   plant("/read-only", OURS);
   readOnly.add("/read-only");
   assert.deepEqual(await moveChain(native, "/old", "/read-only", ["app"]), { error: "notWritable" });
+  plant("/read-only-theirs", "theirs");
+  readOnly.add("/read-only-theirs");
+  assert.deepEqual(await moveChain(native, "/old", "/read-only-theirs", ["app"]), { error: "otherData" }, "another phrase's data is named first, whatever the folder's permissions");
 });
 
 test("a failed copy removes only the files it wrote: a file another device wrote meanwhile, and the chain, stay", async () => {
