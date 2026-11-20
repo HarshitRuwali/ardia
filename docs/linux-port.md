@@ -789,9 +789,10 @@ pnpm --filter @ardia/linux acceptance -- <extracted>/ardia/bin/ardia
   `StartupWMClass` set to the class, `Icon=ardia`) give the three classes Ardia's name and icon in bars and switchers;
   every package format installs them (`linux_formats.desktop_entries`). A compositor rule can still match the class,
   for niri `window-rule { match app-id="^ardia-little$" open-floating false }` to tile it again. Settings' app id was
-  `chrome-ArdiaSettings-Default` before, so an existing rule naming it needs the new id.
-  `usage_counts.little_ardia_opened_floating` and `utility_windows_opened_floating` count windows opened with the pin,
-  in the window that opened.
+  `chrome-ArdiaSettings-Default` before, so an existing rule naming it needs the new id. A window that the shell turns
+  into Little Ardia after it opened, or back (`set_small`), keeps the class and the tiling it opened with: Wayland
+  can't change an app id once a window is mapped. `usage_counts.little_ardia_opened_floating` and
+  `utility_windows_opened_floating` count windows opened with the pin, in the window that opened.
 - **Header drag and double-click.** Dragging the header moves the window (`DispatchHostWindowDragMovement`).
   Double-clicking it runs the desktop's titlebar action.
 - **Outer frame.** The host overlays Chromium's client view and doesn't replace its frame. Without the Wayland
