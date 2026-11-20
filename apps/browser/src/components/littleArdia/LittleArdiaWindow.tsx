@@ -28,6 +28,7 @@ import { SMALL_LIGHTS_CENTER } from "../../state/windows/small";
 import { littleArdiaBarLayout, type LittleArdiaBarLayout } from "./barLayout";
 import { useWindowButtonStyle } from "../../state/windows/windowButtons";
 import { HistoryButton } from "../toolbar/NavButtons";
+import { NAV_HINTS, useShortcutHints } from "../../state/commands/commandShortcuts";
 import { toolbarPalette } from "../ui/toolbarColors";
 import { useHistoryAvailability } from "../../state/tabs/navigation";
 import { LITTLE_ARDIA_PINCH, LITTLE_ARDIA_SWIPE_CLOSE, SMALL_FIELD_MAX_WIDTH, smallBarRow } from "./tokens";
@@ -200,13 +201,14 @@ function LittleArdiaBar() {
 function HistoryButtons({ tabId, windowId, bar }: { tabId: string; windowId: string; bar: LittleArdiaBarLayout }) {
   const palette = toolbarPalette(useTheme(), null);
   const history = useHistoryAvailability(tabId);
+  const hints = useShortcutHints(NAV_HINTS);
   const hit = NAV_HIT();
   const back = useMemo(() => navPlace(bar, 0, hit), [bar, hit]);
   const forward = useMemo(() => navPlace(bar, 1, hit), [bar, hit]);
   return (
     <>
-      <HistoryButton place={back} tabId={tabId} windowId={windowId} direction={-1} disabled={!history.back} palette={palette} onFocus={alreadyFocused} closesTab={history.backCloses} />
-      <HistoryButton place={forward} tabId={tabId} windowId={windowId} direction={1} disabled={!history.forward} palette={palette} onFocus={alreadyFocused} />
+      <HistoryButton place={back} tabId={tabId} windowId={windowId} direction={-1} disabled={!history.back} palette={palette} onFocus={alreadyFocused} closesTab={history.backCloses} historyHint={hints.back} />
+      <HistoryButton place={forward} tabId={tabId} windowId={windowId} direction={1} disabled={!history.forward} palette={palette} onFocus={alreadyFocused} historyHint={hints.forward} />
     </>
   );
 }
