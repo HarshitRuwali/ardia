@@ -70,7 +70,11 @@ export const PHONE_WHATS_SENT: { title: string; items: SentItem[] }[] = [
         fields: ["search_tile_taps", "voice_tile_taps", "incognito_tile_taps"],
       },
       {
-        text: "In the same daily counts, on Android: how often you summarized a page by pinching in or from the page menu, how many summaries ChatGPT wrote, Gemini Nano wrote on the phone or were the page’s own lines, how many it couldn’t write, and how often ChatGPT couldn’t summarize so the phone did, never while browsing privately. Counts only, never which page or what the summary said",
+        text: "In the same daily counts, on Android: how often you tapped the Ardia logo on the start page to search. Counts only, and never while browsing privately",
+        fields: ["start_logo_taps"],
+      },
+      {
+        text: "In the same daily counts, on Android: how often you summarized a page by pinching in or from the page menu, how many summaries ChatGPT or Gemini Nano wrote, how many neither could write, and how often ChatGPT couldn’t summarize so Gemini Nano did on the phone, never while browsing privately. Counts only, never which page or what the summary said",
         fields: ["page_summaries_chatgpt", "page_summaries_chatgpt_fallbacks"],
       },
     ],
