@@ -109,5 +109,5 @@ test("Little Ardia and utility windows opened floating are counted apart, sent w
   placement.noteWindowOpenedFloating(true, consent());
   client.setSharing(true, "settings");
   placement.noteWindowOpenedFloating(true, before);
-  assert.deepEqual(placement.takeWindowPlacementCounts(), { window_centered_resizes: 0, windows_reopened_maximized: 0, window_titles_read: 0, window_drag_loops: 0, little_ardia_opened_floating: 0, utility_windows_opened_floating: 0 });
+  assert.deepEqual(placement.takeWindowPlacementCounts(), { window_centered_resizes: 0, windows_reopened_maximized: 0, window_titles_read: 0, window_drag_loops: 0, window_close_pins_kept: 0, little_ardia_opened_floating: 0, utility_windows_opened_floating: 0 });
 });

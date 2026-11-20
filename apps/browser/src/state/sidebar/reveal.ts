@@ -1,18 +1,16 @@
-import { useBrowser, type BrowserState } from "../browser/store";
+import { useBrowser } from "../browser/store";
 import { activeTabId } from "../browser/model";
-import { isAsleep } from "../tabs/pageSession";
+import { revealTargets, type RevealTargets } from "./revealTargets";
 import { useLive } from "../live/store";
-import { changedIds } from "../browser/changes";
-
-const closedAway = (s: BrowserState, prev: BrowserState, tabId: string | undefined) =>
-  !!tabId && (!s.tabs[tabId] || (isAsleep(s.tabs[tabId]) && !isAsleep(prev.tabs[tabId])));
+import { knownFaviconTheme, resolveFavicon } from "../favicons/favicons";
+import { iconMarks } from "./rowState";
 
 const asked = new Map<string, Set<(tabId: string) => void>>();
 
 export const revealTab = (windowId: string, tabId: string) => asked.get(windowId)?.forEach((reveal) => reveal(tabId));
 
-export function watchRevealTargets(windowId: string, found: (switched: string | null, opened: string | null) => void) {
-  const ask = (tabId: string) => found(tabId, null);
+export function watchRevealTargets(windowId: string, found: (targets: RevealTargets, viaPill: boolean) => void) {
+  const ask = (tabId: string) => found({ switched: tabId, opened: null }, true);
   const askers = asked.get(windowId) ?? new Set();
   asked.set(windowId, askers.add(ask));
   const unsubscribe = watchStoreTargets(windowId, found);
@@ -23,36 +21,33 @@ export function watchRevealTargets(windowId: string, found: (switched: string | 
   };
 }
 
-const watchStoreTargets = (windowId: string, found: (switched: string | null, opened: string | null) => void) =>
-  useBrowser.subscribe((s, prev) => {
+const watchStoreTargets = (windowId: string, found: (targets: RevealTargets, viaPill: boolean) => void) =>
+  useBrowser.subscribeTo(["windows", "tabs"], (s, prev) => {
     if (s.windows === prev.windows && s.tabs === prev.tabs) return;
-    let switched: string | null = null;
-    let opened: string | null = null;
-    const active = activeTabId(s, windowId);
-    const previous = activeTabId(prev, windowId);
-    if (active && active !== previous && !closedAway(s, prev, previous)) switched = active;
-    const w = s.windows[windowId];
-    const before = prev.windows[windowId];
-    if (w && before && w.tabIds !== before.tabIds) {
-      const had = new Set(before.tabIds);
-      for (const id of w.tabIds) if (!had.has(id) && s.tabs[id]?.openerId && id !== active) opened = id;
-    }
-    found(switched, opened);
+    const targets = revealTargets(s, prev, windowId);
+    if (targets.switched || targets.opened) found(targets, false);
   });
 
 export const selectedTabIn = (windowId: string) => activeTabId(useBrowser.getState(), windowId);
 
-const pinsMoved = (s: BrowserState, prev: BrowserState) => changedIds(s.tabs, prev.tabs).some((id) => s.tabs[id]?.pin !== prev.tabs[id]?.pin);
+export type PillTab = { id: string; url: string; favicon: string | null; icon: string | null; profileId: string; faviconUri: string | null; template: boolean; marks: number };
 
-export function watchRowsMoved(moved: () => void) {
-  const stopBrowser = useBrowser.subscribe((s, prev) => {
-    if (s.windows !== prev.windows || s.groups !== prev.groups || pinsMoved(s, prev)) moved();
-  });
-  const stopLive = useLive.subscribe((l, prev) => {
-    if (l.folderOrder !== prev.folderOrder || l.folders !== prev.folders) moved();
-  });
-  return () => {
-    stopBrowser();
-    stopLive();
-  };
+export function selectedTabSnapshot(windowId: string): PillTab | null {
+  const s = useBrowser.getState();
+  const id = activeTabId(s, windowId);
+  const tab = id ? s.tabs[id] : undefined;
+  if (!id || !tab) return null;
+  const faviconUri = resolveFavicon(tab.url, tab.favicon, tab.profileId)?.uri ?? null;
+  const theme = faviconUri ? knownFaviconTheme(faviconUri) : null;
+  return { id, url: tab.url, favicon: tab.favicon ?? null, icon: tab.customIcon ?? null, profileId: tab.profileId, faviconUri, template: theme?.kind === "template" && !!theme.stroke, marks: iconMarks(s, id) };
 }
+
+export type RowsStamp = readonly unknown[];
+
+export function rowsStamp(): RowsStamp {
+  const s = useBrowser.getState();
+  const l = useLive.getState();
+  return [s.windows, s.groups, s.tabs, l.folderOrder, l.folders];
+}
+
+export const sameRows = (a: RowsStamp | null, b: RowsStamp) => !!a && a.length === b.length && a.every((x, i) => x === b[i]);
