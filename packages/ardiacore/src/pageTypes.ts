@@ -176,10 +176,11 @@ export type ExtensionActionResult = "none" | "popup" | "sidePanel";
 export type PageSelection = { text: string; rect: { x: number; y: number; width: number; height: number } };
 export type ScrollState = "down" | "up" | "top";
 export type FocusRestoreOutcome = "focused" | "kept" | "refused" | "gaveUp" | "unknown";
-export type ProtectedMediaRequest = { keySystem: string; main: boolean };
+export type ProtectedMediaRequest = { keySystem: string; main: boolean; stage?: "access" | "createMediaKeys" | "licence" | "keystatus" };
 
 export type WebViewProps = ViewProps & {
   engine?: PageEngine;
+  retired?: boolean;
   url?: string;
   profile?: string;
   adoptId?: string;
@@ -268,7 +269,7 @@ export type WebViewHandle = {
   find(text: string, forward: boolean, findNext: boolean): Promise<void>;
   stopFinding(clearSelection: boolean): Promise<void>;
   print(): Promise<void>;
-  runPageCommand(name: "savePage" | "systemPrint" | "caretBrowsing"): Promise<void>;
+  runPageCommand(name: "savePage" | "systemPrint" | "caretBrowsing" | "viewSource"): Promise<void>;
   showDevTools(panel?: string): Promise<void>;
   executeJavaScript(code: string): Promise<void>;
   evaluate<T = unknown>(code: string): Promise<T | null>;
