@@ -81,6 +81,7 @@ export const WHATS_SENT: { title: string; items: string[] }[] = [
       "How many pop-up windows opened as tabs because Open pop-up windows as tabs is on, and how many ⇧-clicked links that would have opened a new window opened as a Peek instead, summed up once an hour. Never which page, pop-up or link",
       "How many times you chose No Icon for a pinned tab, so it shows its title alone, summed up once an hour. Never which tab",
       "How many times you switched a window between tabs in the sidebar and tabs across the top, from the View menu, its keyboard shortcut, the command bar, the tab menu or the ardia command, and in which direction, summed up once an hour. Not when you choose it in Settings",
+      "How many site icons pages announced were fetched for their tabs, and how many of those came back with no image, summed up once an hour. Never which site or icon",
       "How many tab hover cards the tab strip across the top showed, and how many of those were for a tab from a profile other than the window's, summed up once an hour. Never which tab",
       "How many times the profile pages came to rest after a swipe, a profile shortcut or a page dot, how many of those stayed on the same profile, and how many times you reordered profiles by dragging a dot or icon in the sidebar's profile switcher, summed up once an hour. Never which profile",
       "How many times the toolbar hid while you scrolled a page, how many of those came less than a second after it had shown again, how many times the hidden toolbar peeked out under the pointer, and on Linux how many times a page stopped drawing while the toolbar peeked over it, summed up once an hour. Never which page",
@@ -148,6 +149,7 @@ export const WHATS_SENT: { title: string; items: string[] }[] = [
       "How many changes to a window's tabs Chromium refused to apply (as when the tab strip belonged to another window), summed up once an hour. Never which tabs",
       "How many times a page in a pop-up window (such as a site's web player) asked for copy-protected media and was refused, counted by the kind of protection it asked for (Widevine, PlayReady, FairPlay or another), how many times one waited for copy-protected media without any being refused, and for both whether the pop-up is on one of Ardia's built-in streaming sites, summed up once an hour. Never which site, address or title",
       "How many times a click on the left or right side of a Picture in Picture video skipped it back or ahead 10 seconds, each side separately, summed up once an hour",
+      "How many times a click on the arrow of a Picture in Picture window tucked at the edge of the screen brought it back, summed up once an hour",
       "How many times you dragged a Picture in Picture window, how many of those drags let the spot you grabbed slip from under the pointer, and how many had a window move that took longer than 8 ms, summed up once an hour. Never where it was",
       "How many times you resized a Picture in Picture window by its edge, and how many of those began inside the window while the pointer wasn't showing the resize arrows, summed up once an hour. Never its size or where it was",
       "How many times a Picture in Picture window (a video or a page) closed, split by whether it was automatic or one you opened, and by whether Ardia asked for the close or Chromium closed it by itself, summed up once an hour. Never which page",
@@ -218,7 +220,7 @@ export const WHATS_SENT: { title: string; items: string[] }[] = [
     title: "The local copy",
     items: [
       "Leaves this Mac only as the events above while sharing is on, or when you attach it to a problem report. Settings › Privacy › View My Data saves it to your Downloads folder",
-      "Every hour, how big the local copy is and how long writing it took, so we notice if it ever slows Ardia down",
+      "Every hour while sharing is on, how much Ardia wrote to the local copy that hour and how long writing it took, so we notice if it ever slows Ardia down",
     ],
   },
   {
@@ -256,7 +258,7 @@ export const LOCAL_COPY = {
   exportFailed: "Couldn't save your data",
   items: [
     "Each event and warning or error line listed in What's Sent, with whether it was sent, and the last 20 times Ardia froze for 0.4 seconds or more: which part froze, for how long, which of its own jobs was running and the program addresses where it was stuck, kept whether sharing is on or off (Help › Copy Last Freeze copies the latest)",
-    "With sharing off, they carry no install ID and stay here",
+    "With sharing off, they carry no install ID and stay here, except usage counts and speed, memory and local-copy measurements, which aren't kept at all",
     "Kept 7 days and 8 MB at most, oldest first out; checked when Ardia opens and every hour",
     "Never leaves this Mac unless sharing is on or you attach it to a problem report",
     "Resetting your anonymous ID deletes it",
@@ -267,7 +269,7 @@ const ADDED_ITEMS = {
   Usage: [
     "How many cut, copy, paste and select all keys a page handed back to Ardia were carried out or refused as stale, and of those, how the first one after another app handed the window back was answered, summed up once an hour. Never what you copied or pasted or on which page",
     "When an import lists the other browser's Chrome Web Store extensions: how many it listed, how many it left out and why (already in Ardia, Manifest V2, loaded unpacked, installed by policy or by another app, or not from the Chrome Web Store), and how many of their store pages you opened from the list, summed up once an hour. Never which extensions, browser or profiles",
-    "How many times the list of your windows and tabs was saved to disk, how many of those saves only carried new tab titles, icons or last-used times, how much was written, in kilobytes, and how many saves removed pinned tabs or pinned folders and kept a copy of them first, with how many, summed up once an hour. Never what the tabs are",
+    "How many times the list of your windows and tabs was saved to disk, how many of those saves only carried new tab titles, icons or last-used times, how much was written, in kilobytes, how many saves removed pinned tabs or pinned folders and kept a copy of them first, with how many, and how many tries to keep that copy failed, summed up once an hour. Never what the tabs are",
     "How many times Paste and Match Style was run from the keyboard, and from which of its two shortcuts, summed up once an hour. Never what you pasted or where",
     "How many times the first-launch intro was shown, how many of those started with its music muted, how many were skipped and how many played to the end, and on Windows how many showed the moving meadow, the still picture, or the still picture after the meadow failed, and the time the meadow took to draw its first frame, rounded to a tenth of a second, and on Linux how many times the intro's music couldn't play, summed up once an hour",
     "On Windows, how many animations ran and how many of their frames came late, summed up once an hour",
