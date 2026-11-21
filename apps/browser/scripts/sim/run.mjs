@@ -4,17 +4,19 @@ const HELP = `Store simulator: seeded random action sequences against the real b
   pnpm -C apps/browser sim                     the CI seed set, every mode (deterministic)
   node scripts/sim/run.mjs [options]
 
-  --mode <correctness|all>                 what to run (default all)
+  --mode <correctness|cost|leak|map|all>   what to run (default all)
   --seeds <a-b|a,b,c>                      seeds (default the CI set)
   --steps <n>                              steps per seed (default 120)
   --soak <seconds>                         keep drawing new seeds until the time is up
   --replay '<json>'                        replay one sequence ([["kind", picks…], …]) and print each step
   --src <dir>                              another apps/browser/src to drive (an older commit's export)
+  --map <file>                             where the dependency map goes (default sim-out/dependency-map.md)
   --shrink-budget <n>                      replays the shrinker may spend per failure (default 600)
   --json                                   print the result as JSON
   --help                                   this text
 `;
 import { spawnSync } from "node:child_process";
+import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -31,7 +33,7 @@ if (args.includes("--help")) {
 export const CI_SEEDS = "1-40";
 export const CI_STEPS = 120;
 const REACH_FLOOR_SEEDS = 20;
-const MODES = ["correctness"];
+const MODES = ["correctness", "cost", "leak", "map"];
 
 const parseSeeds = (text) =>
   text.split(",").flatMap((part) => {
@@ -118,5 +120,14 @@ async function replayOne(json) {
 
 let ok;
 if (flag("replay")) ok = await replayOne(flag("replay"));
-else ok = await correctness();
+else if (mode === "correctness") ok = await correctness();
+else {
+  const cost = await import("./cost.mjs");
+  const mapFile = flag("map", resolve(here, "../../sim-out/dependency-map.md"));
+  const write = (file, text) => {
+    mkdirSync(dirname(file), { recursive: true });
+    writeFileSync(file, text);
+  };
+  ok = await cost.runMode(world, mode, { seeds, steps, out, asJson, mapFile, write });
+}
 process.exit(ok ? 0 : 1);
