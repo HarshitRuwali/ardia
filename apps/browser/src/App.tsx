@@ -12,6 +12,7 @@ import { ExtensionOverlays } from "./components/extensions/ExtensionOverlays";
 import { ExtensionSidePanel } from "./components/extensions/SidePanel";
 import { PluginSidePanel } from "./components/plugins/PluginSidePanel";
 import { PluginOverlays } from "./components/plugins/PluginOverlays";
+import { PLUGIN_CHROME, PluginChromeContext, usePluginChrome, usePluginChromeOf } from "./state/plugins/chrome";
 import { CrxDropArea } from "./components/extensions/CrxDropArea";
 import { DownloadMagnet, DownloadsPopover } from "./components/downloads/Downloads";
 import { UtilityWindow } from "./components/settings/UtilityWindow";
@@ -53,10 +54,13 @@ function BrowserWindowRoot({ windowId }: { windowId?: string }) {
   const id = useBrowser((s) => windowId ?? focusedWindowOf(s) ?? s.windowOrder[0] ?? null);
   const exists = useBrowser((s) => !!id && !!s.windows[id]);
   const small = useBrowser((s) => !!id && s.windows[id]?.kind === "small");
+  const pluginChrome = usePluginChromeOf(id ?? "");
   if (!id || !exists) return null;
   return (
     <WindowContext.Provider value={id}>
-      <ThemeScope>{small ? <LittleArdiaWindow /> : <BrowserWindow />}</ThemeScope>
+      <PluginChromeContext.Provider value={small ? 0 : pluginChrome}>
+        <ThemeScope>{small ? <LittleArdiaWindow /> : <BrowserWindow />}</ThemeScope>
+      </PluginChromeContext.Provider>
     </WindowContext.Provider>
   );
 }
@@ -66,6 +70,8 @@ function BrowserWindow() {
   const windowId = useWindowId();
   const topTabs = useTabLayout() === "top";
   const fullscreen = !!useFullscreenTab(windowId);
+  const pluginPanels = usePluginChrome(PLUGIN_CHROME.panels);
+  const pluginOverlays = usePluginChrome(PLUGIN_CHROME.overlays);
   const frame = usePageFrameInset();
   const cardTop = useCardTopInset(frame);
   const [width, setWidth] = useState(0);
@@ -76,10 +82,10 @@ function BrowserWindow() {
       <>
         <ContentCard />
         {!fullscreen && <ExtensionSidePanel />}
-        <PluginSidePanel hidden={fullscreen} />
+        {pluginPanels ? <PluginSidePanel hidden={fullscreen} /> : null}
       </>
     ),
-    [fullscreen],
+    [fullscreen, pluginPanels],
   );
 
   return (
@@ -106,7 +112,7 @@ function BrowserWindow() {
           <FolderMenus />
           <DownloadsPopover />
           <ExtensionOverlays />
-          <PluginOverlays />
+          {pluginOverlays ? <PluginOverlays /> : null}
           <DownloadMagnet />
           <BookmarkDialog />
           <EditBookmarkDialog />
