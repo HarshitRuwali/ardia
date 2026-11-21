@@ -123,12 +123,13 @@ export type PictureInPictureShown = { kind: "video" | "document"; active: true; 
 export type PictureInPictureState = { kind: "video" | "document"; active: boolean; closedBy?: "app" | "chrome"; auto?: boolean } | PictureInPictureShown;
 export type PictureInPictureDrag = { offCursor: boolean; slowMove: boolean; epoch: string };
 export type PictureInPictureSkip = { seconds: number; epoch: string };
+export type PictureInPictureStandIn = { pinch: boolean; timedOut: boolean; epoch: string };
 export type PictureInPictureUnstash = { epoch: string };
 export type PictureInPictureResize = { inside: boolean; cursorShown: boolean; epoch: string };
 export type AutoPictureInPictureHold = "onScreen" | "appSwitch" | "nothingPlaying";
 export type MediaFault = { reason: string; muted?: boolean; blockerActive?: boolean };
 export type ControlPress = { clickAt: number; control: number };
-export type ActivateRequest = { reason: "pictureInPicture" };
+export type ActivateRequest = { reason: "pictureInPicture" | "page" | "window"; fromOtherApp?: boolean };
 export type DisplayMediaSource = {
   id: string;
   kind: "screen" | "window";
@@ -221,6 +222,7 @@ export type WebViewProps = ViewProps & {
   onPictureInPictureDragged?: (drag: PictureInPictureDrag) => void;
   onPictureInPictureResized?: (resize: PictureInPictureResize) => void;
   onPictureInPictureSkip?: (skip: PictureInPictureSkip) => void;
+  onPictureInPictureStandIn?: (standIn: PictureInPictureStandIn) => void;
   onPictureInPictureUnstashed?: (unstash: PictureInPictureUnstash) => void;
   onMediaFault?: (fault: MediaFault) => void;
   onActivateRequest?: (request: ActivateRequest) => void;

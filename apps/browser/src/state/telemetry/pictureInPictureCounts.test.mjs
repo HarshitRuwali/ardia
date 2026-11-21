@@ -15,18 +15,18 @@ async function sentUsageCounts() {
   const saved = JSON.parse(stub.docs.get("telemetry-queue.json") ?? '{"events":[]}');
   return saved.events
     .filter((e) => e.event === "usage_counts")
-    .map((e) => ({ chromium: e.properties.pip_back_to_tab, webkit: e.properties.pip_back_to_tab_webkit }));
+    .map((e) => ({ chromium: e.properties.pip_back_to_tab, webkit: e.properties.pip_back_to_tab_webkit, fromOtherApp: e.properties.pip_back_to_tab_from_other_app }));
 }
 
-test("going back to a tab from its Picture in Picture window is counted per engine, sent on its own, then starts again from zero", async () => {
+test("going back to a tab from its Picture in Picture window is counted per engine and from another app, sent on its own, then starts again from zero", async () => {
   client.loadChoice();
   client.setSharing(true, "onboarding");
 
   pipCounts.notePictureInPictureBackToTab("webkit");
-  pipCounts.notePictureInPictureBackToTab("webkit");
-  pipCounts.notePictureInPictureBackToTab("chromium");
+  pipCounts.notePictureInPictureBackToTab("webkit", true);
+  pipCounts.notePictureInPictureBackToTab("chromium", true);
   usage.sessionEnding();
-  assert.deepEqual(await sentUsageCounts(), [{ chromium: 1, webkit: 2 }]);
+  assert.deepEqual(await sentUsageCounts(), [{ chromium: 1, webkit: 2, fromOtherApp: 2 }]);
 
   usage.sessionEnding();
   assert.equal((await sentUsageCounts()).length, 1);
@@ -76,4 +76,29 @@ test("clicks on a tucked Picture in Picture window's arrow are counted, sent wit
 
   usage.sessionEnding();
   assert.equal((await unstashesSent()).length, before + 1);
+});
+
+test("pinches on a Picture in Picture window and resizes that ended before Chromium caught up are counted, then start again from zero", async () => {
+  client.loadChoice();
+  client.setSharing(true, "onboarding");
+  const sentCounts = async () => {
+    await client.saveQueueNow();
+    const saved = JSON.parse(stub.docs.get("telemetry-queue.json") ?? '{"events":[]}');
+    return saved.events
+      .filter((e) => e.event === "usage_counts" && (e.properties.pip_pinches || e.properties.pip_stand_in_timeouts))
+      .map((e) => [e.properties.pip_pinches, e.properties.pip_stand_in_timeouts]);
+  };
+  const before = (await sentCounts()).length;
+
+  pipCounts.notePictureInPictureStandIn({ pinch: true, timedOut: false, epoch: client.consentEpoch() });
+  pipCounts.notePictureInPictureStandIn({ pinch: true, timedOut: true, epoch: client.consentEpoch() });
+  pipCounts.notePictureInPictureStandIn({ pinch: false, timedOut: true, epoch: client.consentEpoch() });
+  pipCounts.notePictureInPictureStandIn({ pinch: true, timedOut: false, epoch: "an epoch from before" });
+  usage.sessionEnding();
+  const sent = await sentCounts();
+  assert.equal(sent.length, before + 1);
+  assert.deepEqual(sent.at(-1), [2, 2]);
+
+  usage.sessionEnding();
+  assert.equal((await sentCounts()).length, before + 1);
 });
