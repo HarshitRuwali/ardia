@@ -1,6 +1,6 @@
 import { diagnosticsSample, hardwareInfo, type HardwareInfo } from "../../platform/app";
 import { onHoverLost, onWindowUnpainted, systemState, type HoverLostEpisode, type WindowUnpaintedRecord } from "../../platform/performance";
-import { cliControlStatus } from "../../platform/cli";
+import { controlStatus } from "../../platform/control";
 import { call } from "../../platform/engine";
 import { withDeadline } from "../../lib/deadline";
 import { hermesHeapMegabytes } from "../../lib/hermesHeap";
@@ -35,7 +35,7 @@ const startedAt = Date.now();
 export const sessionStart = () => appInfo().processStart ?? startedAt;
 let appMemoryMb: number | null = null;
 let pageProcessesGone = 0;
-let pageProcessEvents = 0;
+const pageProcessEvents = { shared: 0, local: 0 };
 let hoverLostEvents = 0;
 let windowUnpaintedEvents = 0;
 let samples: SavedContext[] = [];
@@ -84,7 +84,7 @@ export const noteAppMemory = (totalMb: number) => (appMemoryMb = totalMb);
 export async function recordContext(): Promise<SavedContext | null> {
   const consent = consentToken();
   if (!consent) return null;
-  void cliControlStatus().then((status) => counted(consent, () => {
+  void controlStatus().then((status) => counted(consent, () => {
     noteDragsEnded(status.dragsEnded);
     noteWindowlessPages(status.windowlessPages);
   }), () => {});
@@ -264,9 +264,9 @@ export type PageTranslateContext = { translate: string; translate_stage: string 
 
 export function trackPageProcessGone(info: { reason: string; code: number }, visible: boolean, translate?: PageTranslateContext) {
   const consent = consentNow();
-  pageProcessesGone++;
-  if (pageProcessEvents >= MAX_PAGE_PROCESS_EVENTS) return;
-  pageProcessEvents++;
+  if (isSharing()) pageProcessesGone++;
+  const cap = isSharing() ? "shared" : "local";
+  if (pageProcessEvents[cap]++ >= MAX_PAGE_PROCESS_EVENTS) return;
   const reason = GONE_REASONS.has(info.reason) ? info.reason : "unknown";
   const props = {
     process: "renderer",

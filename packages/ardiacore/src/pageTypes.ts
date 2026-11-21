@@ -19,10 +19,6 @@ export type NavigationState = {
 };
 
 export type AppBadge = { origin: string; count: number | null; flag: boolean };
-export type FieldProviderPanelRefusal = "hidden" | "notFocused" | "unavailable" | "notKey" | "notEditing" | "throttled" | "refused" | "noPanel";
-export type FieldProviderOpened = { via: "badge" | "menu"; shown: boolean; reason?: FieldProviderPanelRefusal; panel?: "above" | "below" };
-export type FieldProviderHint = { state: "shown" | "dismissed" };
-export type VerificationCodeFound = { token: string; app: string; main: boolean };
 
 export type MediaState = { playing: boolean; muted: boolean };
 
@@ -123,6 +119,7 @@ export type PictureInPictureShown = { kind: "video" | "document"; active: true; 
 export type PictureInPictureState = { kind: "video" | "document"; active: boolean; closedBy?: "app" | "chrome"; auto?: boolean } | PictureInPictureShown;
 export type PictureInPictureDrag = { offCursor: boolean; slowMove: boolean; epoch: string };
 export type PictureInPictureSkip = { seconds: number; epoch: string };
+export type PictureInPictureUnstash = { epoch: string };
 export type PictureInPictureResize = { inside: boolean; cursorShown: boolean; epoch: string };
 export type AutoPictureInPictureHold = "onScreen" | "appSwitch" | "nothingPlaying";
 export type MediaFault = { reason: string; muted?: boolean; blockerActive?: boolean };
@@ -220,6 +217,7 @@ export type WebViewProps = ViewProps & {
   onPictureInPictureDragged?: (drag: PictureInPictureDrag) => void;
   onPictureInPictureResized?: (resize: PictureInPictureResize) => void;
   onPictureInPictureSkip?: (skip: PictureInPictureSkip) => void;
+  onPictureInPictureUnstashed?: (unstash: PictureInPictureUnstash) => void;
   onMediaFault?: (fault: MediaFault) => void;
   onActivateRequest?: (request: ActivateRequest) => void;
   onDisplayMediaRequest?: (request: DisplayMediaRequest) => void;
@@ -240,9 +238,6 @@ export type WebViewProps = ViewProps & {
   onPreferredSize?: (size: { width: number; height: number }) => void;
   onTransferRefused?: (fromWindowId: string) => void;
   onAppBadge?: (badge: AppBadge) => void;
-  onFieldProviderOpened?: (opened: FieldProviderOpened) => void;
-  onFieldProviderHint?: (hint: FieldProviderHint) => void;
-  onVerificationCodeFound?: (found: VerificationCodeFound) => void;
 };
 
 export type WebViewHandle = {
@@ -294,6 +289,28 @@ export type WebViewHandle = {
   discard(options?: { unload?: boolean }): Promise<DiscardOutcome>;
   sleepIfHidden(seconds: number): Promise<DiscardRefusal[]>;
   setFrozen(frozen: boolean): Promise<void>;
+};
+
+export type WebViewNativeHandle = Omit<
+  WebViewHandle,
+  | "nativeTag"
+  | "isAttached"
+  | "evaluate"
+  | "loadUrl"
+  | "resolvePasswordPrompt"
+  | "answerAutofillPrompt"
+  | "discard"
+  | "requestPictureInPicture"
+  | "takeControlPress"
+> & {
+  readonly nativeTag: number | null;
+  answerAutofillPrompt(id: number, answer: string): Promise<boolean>;
+  requestPictureInPicture(clickAt: number, control: number): Promise<boolean>;
+  takeControlPress(clickAt: number, control: number): Promise<boolean>;
+  evaluate(code: string): Promise<string | null>;
+  loadUrl(url: string, userInitiated?: boolean): Promise<void>;
+  resolvePasswordPrompt(answer: string, username: string | null, password: string | null): Promise<void>;
+  discard(unload: boolean): Promise<DiscardOutcome>;
 };
 
 export type DiscardOutcome = "discarded" | "already" | "refused" | "unsupported";
