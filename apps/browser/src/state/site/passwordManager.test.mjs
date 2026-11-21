@@ -59,7 +59,7 @@ test("before any password manager plugin is on, every profile keeps Ardia's mana
   pm.startPasswordManager();
   await settle();
   assert.equal(pm.currentPasswordManager("default"), "ardia");
-  assert.deepEqual(calls("setFieldProviders"), [[1, []]], "launch pushes the empty set once");
+  assert.deepEqual(calls("setFieldProviders"), [], "nothing is pushed while no password manager is in use");
   assert.deepEqual(calls("offerToSave"), []);
   native.calls.length = 0;
 });
@@ -70,7 +70,7 @@ test("the consent sheet names the reach and, for a built-in plugin, how many pro
   assert.ok(lines.includes("Moves 3 profiles that never picked a password manager to Test Passwords"), lines.join("\n"));
   assert.ok(lines.some((l) => l.startsWith("Shows a key in login and verification code fields on every site")));
   assert.ok(lines.some((l) => l.startsWith("Offers to set up two-factor codes")));
-  assert.ok(lines.some((l) => l.startsWith("Shows whether Ardia may use passkeys")));
+  assert.ok(!lines.some((l) => /passkey/i.test(l)), "the passkeys key adds no line: the plugin can't use passkeys, and Ardia's own access lives in Settings › Engines");
   const installed = consentLines(P().listings["other-passwords"].manifest, { bundled: false, movesProfiles: 3 }).map((l) => l.text);
   assert.ok(!installed.some((l) => l.startsWith("Moves")), "an installed plugin moves nobody");
 });
@@ -79,7 +79,7 @@ test("an installed plugin moves no profile on Turn On; a profile picks it explic
   turnOn("other-passwords");
   await settle();
   assert.equal(pm.currentPasswordManager("default"), "ardia");
-  assert.deepEqual(calls("setFieldProviders"), [], "nothing to push yet");
+  assert.deepEqual(calls("setFieldProviders"), [[1, []]], "the first manager plugin starts it, with nobody to fill for yet");
   pm.choosePasswordManager(work, "plugin:other-passwords");
   await settle();
   assert.equal(S().profiles[shared].passwordManager, "plugin:other-passwords", "profiles sharing data share the choice");

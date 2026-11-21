@@ -31,8 +31,16 @@ double ClickSkipSeconds(NSWindow *window, NSPoint local) {
   return ardia_pip_seek::SkipSecondsAt(local.x, NSWidth(window.frame));
 }
 
+BOOL OnStashHandle(NSWindow *window, NSEvent *event) {
+  ArdiaPiPController *controller = [ArdiaPiPController forWindow:window];
+  ArdiaPiPHandle *handle = controller.overlay.handle;
+  if (!handle || handle.hidden || controller.stashedEdge == ArdiaPiPEdgeNone) return NO;
+  return NSPointInRect([handle convertPoint:event.locationInWindow fromView:nil], handle.bounds);
+}
+
 BOOL GrabsWindowBackground(NSWindow *window, NSEvent *event) {
   if (!window || ![ArdiaPiPController forWindow:window] || (event.modifierFlags & NSEventModifierFlagControl)) return NO;
+  if (OnStashHandle(window, event)) return YES;
   if (event.clickCount > 1 && !ClickSkipSeconds(window, event.locationInWindow)) return NO;
   if ([window respondsToSelector:@selector(_resizeDirectionForMouseLocation:)] &&
       [window _resizeDirectionForMouseLocation:event.locationInWindow] != -1)
@@ -53,6 +61,8 @@ double gGrabSkip;
 
 NSInteger gGrabClicks;
 
+BOOL gGrabHandle;
+
 void NoteGrabTravel(NSEvent *event) {
   const NSPoint mouse = PointerOf(event);
   gGrabTravel = std::max(gGrabTravel, ardia_pip_seek::Travel(mouse.x - gGrabMouse.x, mouse.y - gGrabMouse.y));
@@ -63,8 +73,10 @@ void InstallDragMonitor() {
   if (monitor) return;
   monitor = [NSEvent addLocalMonitorForEventsMatchingMask:NSEventMaskLeftMouseDown | NSEventMaskLeftMouseDragged | NSEventMaskLeftMouseUp
                                                   handler:^NSEvent *(NSEvent *event) {
+                                                    if ([ArdiaPiPZoom continueEdgeResize:event]) return nil;
                                                     if (event.type == NSEventTypeLeftMouseDown) {
                                                       NSWindow *window = event.window;
+                                                      if ([ArdiaPiPZoom beginEdgeResize:window event:event]) return nil;
                                                       ArdiaPiPController *grabbed =
                                                           GrabsWindowBackground(window, event) ? [ArdiaPiPController forWindow:window] : nil;
                                                       gDragged = grabbed;
@@ -75,6 +87,7 @@ void InstallDragMonitor() {
                                                       gGrabTravel = 0;
                                                       gGrabSkip = ClickSkipSeconds(window, event.locationInWindow);
                                                       gGrabClicks = event.clickCount;
+                                                      gGrabHandle = OnStashHandle(window, event);
                                                       ardia_host::NotePointer(event, @"pipDrag");
                                                       return nil;
                                                     }
@@ -86,6 +99,7 @@ void InstallDragMonitor() {
                                                       [dragged dragEnded:event];
                                                       if (gGrabSkip && ardia_pip_seek::IsClick(gGrabTravel))
                                                         [dragged skipDraggedBy:gGrabSkip at:gGrabLocal clickCount:gGrabClicks];
+                                                      if (gGrabHandle && ardia_pip_seek::IsClick(gGrabTravel)) [dragged unstashFromHandle];
                                                       ardia_host::NotePointer(event, @"pipDrag");
                                                     } else {
                                                       [dragged dragMoved:event];
@@ -226,16 +240,35 @@ BOOL ConsumeBackToTabActivation() {
   return pending;
 }
 
+BOOL ActivateApp(NSString *why) {
+  gActivations++;
+  const BOOL fromOtherApp = !NSApp.isActive;
+  if (ardia_host::Background()) {
+    ardia_host::LogActivation([@"activateIgnoringOtherApps (skipped in a test instance): " stringByAppendingString:why]);
+    return fromOtherApp;
+  }
+  MarkBackToTabActivation();
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
+  [NSApp activateIgnoringOtherApps:YES];
+#pragma clang diagnostic pop
+  return fromOtherApp;
+}
+
 void WatchZoom() { InstallZoomMonitor(); }
 
 NSWindow *GrabbedWindow() { return gDragged.window; }
 
-void TabRequestedActivation(ArdiaWebView *view) {
+BOOL TabRequestedActivation(ArdiaWebView *view, BOOL *fromOtherApp) {
+  *fromOtherApp = NO;
   for (NSWindow *window in NSApp.windows)
     if ([ArdiaPiPController forWindow:window].view == view && window.visible) {
       MarkBackToTabActivation();
-      if (!window.hasShadow) return ActivateApp(@"Back to Tab (Chrome's button)");
+      if (window.hasShadow) continue;
+      *fromOtherApp = ActivateApp(@"Back to Tab (Chrome's button)");
+      return YES;
     }
+  return NO;
 }
 
 void VideoEntered(ArdiaWebView *view, NSString *host, ArdiaConsentStamp *stamp) {
@@ -342,6 +375,9 @@ void DocumentEntered(ArdiaWebView *view, ArdiaConsentStamp *stamp) {
   else if ([action isEqual:@"throw"]) return DevJSON([controller throwInfo]);
   else if ([action isEqual:@"skip"]) return DevJSON([controller skipInfo]);
   else if ([action isEqual:@"resizeCursor"]) return DevJSON([controller.resizeCursor probe]);
+  else if ([action hasPrefix:@"pinch:"]) [ArdiaPiPZoom devPinch:controller.window args:[[action substringFromIndex:6] componentsSeparatedByString:@","]];
+  else if ([action isEqual:@"pinchStats"]) return DevJSON([ArdiaPiPZoom devPinchStats:controller.window]);
+  else if ([action isEqual:@"standIn"]) return [ArdiaPiPZoom devStandInWindow:controller.window];
   else if ([action hasPrefix:@"resizeCursor:"]) controller.resizeCursor.enabled = [[action substringFromIndex:13] isEqual:@"on"];
   else if ([action isEqual:@"interactive"]) {
     if (!ArdiaLaunchConfig.shared.testInstance) return @"test instances only";
@@ -369,6 +405,10 @@ void DocumentEntered(ArdiaWebView *view, ArdiaConsentStamp *stamp) {
 
 + (BOOL)consumePictureInPictureActivation {
   return ConsumeBackToTabActivation();
+}
+
++ (BOOL)activateForPictureInPictureReturn {
+  return ActivateApp(@"Back to Tab (WebKit Picture in Picture)");
 }
 
 @end
