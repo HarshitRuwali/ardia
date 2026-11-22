@@ -716,9 +716,13 @@ command ([linux-ci.md](linux-ci.md) › Linux releases).
   called the helper started (another instance already replaced it, so this one's version check is stale). PATH is its own and the prefix comes from its own
   location, never from the caller. The last line on stdout is `installed <V>` or `failed <reason>` (`usage`,
   `missing`, `manifest`, `signature`, `notNewer`, `kind`, `checksum`, `install`, `busy`, `timeout`).
-- **polkit action `dev.ardia.linux.update`.** `allow_active` is `yes` with no password, `allow_any` and
-  `allow_inactive` are `no`, and `org.freedesktop.policykit.exec.path` limits it to the helper, which only installs
-  a release signed with Ardia's key that is newer than the installed one.
+- **polkit action `dev.ardia.linux.update`.** `allow_active` is `yes`, so the active local session installs with
+  no password. `allow_any` and `allow_inactive` are `auth_self`: polkit counts a remote desktop (xrdp, VNC) as a
+  remote session, so there the session's polkit agent asks for the user's password, and where such a session runs
+  no agent (SSH) Ardia's own pkexec fails and it offers the release page. A user there can still run the helper by
+  hand with pkexec's text agent; an admin who wants less can override the action with a polkit rule or
+  local-authority file. `org.freedesktop.policykit.exec.path` limits it to the helper, which only installs a release
+  signed with Ardia's key that is newer than the installed one.
 - **Signed manifest.** Each release carries `Ardia-<V>-linux-update.txt` (`ardia-linux-update 1`, `version <V>`, then
   `deb`, `tarball` and `appimage` lines with file name, sha256 and size, for the formats on the release) and
   `Ardia-<V>-linux-update.txt.sig`, the raw Ed25519 signature.
@@ -808,8 +812,12 @@ pnpm --filter @ardia/linux acceptance -- <extracted>/ardia/bin/ardia
     `Updates` must be a real directory, and only version folders in it are pruned). Redirects go only to https on
     github.com, objects.githubusercontent.com and release-assets.githubusercontent.com. Caps: 4096 bytes for the
     manifest, 64 for the signature, the manifest's size (at most 512 MiB) for the package, and the package size plus
-    64 MiB free. Then it runs `pkexec <helper> install <dir>` for a `.deb` or tarball, or the helper as the user with
-    `APPIMAGE` and `APPDIR` for an AppImage, with a clean environment and a 10 min deadline (the helper's own is 9).
+    64 MiB free. Then it runs `pkexec --disable-internal-agent <helper> install <dir>` for a `.deb` or tarball, or the
+    helper as the user with `APPIMAGE` and `APPDIR` for an AppImage, with a clean environment and a 10 min deadline
+    (the helper's own is 9). Without its text agent, pkexec never prompts on the terminal Ardia was started from (the
+    helper's own process group would stop on SIGTTIN there): a session that has to ask for the password and has no
+    polkit agent fails at once with `polkit`, and Ardia offers the release page. The active local session needs no
+    agent.
     Failure reasons: `version`, `kind`, `network`, `manifest`, `tooLarge`, `busy`, `disk`, the helper's, `polkit`,
     `timeout`, `missing`. A successful install deletes the folder, and so does a `signature`, `checksum`, `manifest` or
     `notNewer` failure, so the next try downloads afresh.
@@ -866,13 +874,41 @@ pnpm --filter @ardia/linux acceptance -- <extracted>/ardia/bin/ardia
     otherwise (window or page full screen). Linux keeps the sidebar header the Windows rule would collapse whenever
     the hamburger has no other home (`sidebarHeaderLayout.ts`). Some full-screen layouts still have none, as before
     this change: top tabs with minimalism, or a sidebar whose profile part is hidden.
-  - Restore: the engine sends no `maximized` event, so each window reads `ArdiaShell.windowFrame` at start and once
+  - Desktop layout and window state: the engine answers two calls, each advertised in the bootstrap's capabilities
+    (`ac_linux_window_state.h`), and sends an `ArdiaShell` event of the same name when a value changes:
+    - `ArdiaShell.windowButtonLayout` → `{ layout, desktop }`: `layout` is GTK's raw `gtk-decoration-layout` string
+      (GNOME fills it from `org.gnome.desktop.wm.preferences button-layout`: Ubuntu `:minimize,maximize,close`, upstream
+      GNOME `appmenu:close`, elementary `close:maximize`), or `null` without GTK's Linux UI; `desktop` is the browser's
+      `XDG_CURRENT_DESKTOP` (`""` when unset). `chromium-linux-window-state.patch` keeps the string GTK parses, and the
+      event follows Chromium's window-button-order observer, to every window. Subscribe to the event first, then call:
+      the engine sends a layout only when it differs from the last one it saw, including changes no shell was open for,
+      so a shell that loads later learns the current value from the call, not from an event.
+    - `ArdiaShell.windowState` `[windowId]` → `{ maximized, tiled, fullScreen }`, the event adding `windowId` and going to
+      that window's shell. Subscribe first, then call, as with the layout. `fullScreen` is the window's own full screen,
+      the same signal as the `fullScreen` window event (`WindowFullScreen()`): a page's full screen (a video) is not it,
+      and while a page is full screen `windowState` keeps `maximized` and `tiled` from the last state settled before
+      the window went full screen, so they don't flip and no event fires; `fullScreen` still reads the window's own
+      full screen, so it is `false` then. A window settles its state when its shell attaches, so
+      that holds for a window that was already maximized. One exception: when the configure that enters page full
+      screen also changes the tiled edges and Chromium defers applying it, one `tiled` change can surface during page
+      full screen; it corrects itself when full screen ends. `maximized` is the platform's current state, so a maximized
+      window reads `maximized: false` while it is minimized, and `true` again once restored. `tiled` means the
+      compositor tiled all four edges (Wayland's xdg_toplevel `tiled_*` states), whatever else is set: a GNOME half
+      tile is not tiled, but mutter also tiles all four edges of a maximized window, and Hyprland 0.56 sends
+      `maximized` and all four edges to every tiled window, half-width ones too, and keeps sending them after the
+      window is floated, so tell a tiling desktop from a maximized window with `desktop`, not with `tiled` alone. X11
+      derives its edges from maximized, so there `tiled` is always false. Full screen wins over maximized. The patch keeps the
+      edges on the browser widget and tells the host when they change, comparing each configure with the edges it last
+      reported, not the ones the window last applied, so a configure the window never applied can't hide the next
+      change. Bounds, show-state and edge changes in the same task coalesce, so one configure usually gives one event;
+      a maximize can still give an intermediate one when its state and edges land in different tasks.
+  - Restore: the shell doesn't read `windowState` yet, so each window reads `ArdiaShell.windowFrame` at start and once
     per animation frame of resizing, and marks itself maximized when the frame fills the work area, feeding the shared
     `useMaximizedWindows` through `captionRegions.ts`'s `noteMaximized` (`windowMaximized.ts`). Settings and Import
     too. Known limits: a window that fills the work area without being maximized, such as a lone tiled window on a
     tiling window manager (X11 or Wayland), shows restore. On Wayland `windowFrame` is null and the work area is the
     whole output, so the shell compares its outer size with that, and with a panel, a bar or gaps a maximized window
-    keeps the maximize glyph. Clicking still toggles correctly; the glyph needs the engine to report maximized state.
+    keeps the maximize glyph. Clicking still toggles correctly; the glyph waits for the shell to read `windowState`.
 - **Tiling window managers.** Little Ardia, Settings and Import float over the main window on niri, sway and i3 with
   no rule (tested; other compositors that float fixed-size windows do the same), as the Mac floats them since #1905.
   The host opens them with their own window class, the Wayland app id and the X11 `WM_CLASS` instance `ardia-little`,
@@ -1031,6 +1067,8 @@ pnpm --filter @ardia/linux acceptance -- <extracted>/ardia/bin/ardia
 - **Materials.** `VisualEffect`, `GlassEffect`, popover bubbles and the window's vibrancy take light or dark from the
   theme scope they render in (`useSurfaceDark`), not the app appearance, so an Incognito window is dark in a light
   app and a toast is light there.
+  A custom profile theme draws in the window as the theme editor's preview does: the theme's grey underlay, its
+  gradient at its layer alpha (Intensity and Pass-through blur), then its grain, with the theme's forced appearance.
 - **Window controls with the sidebar on the right.** They sit in the right sidebar's header, at its outer edge, as on
   Windows.
 - **Fullscreen restore.** A window saved fullscreen comes back fullscreen. On Wayland the saved output's name is kept

@@ -3,7 +3,7 @@ const HELP = `Resizing the video Picture in Picture window, end to end in a hidd
 edge moves a stand-in that mirrors the live video every display frame instead of waiting ~33 ms for Chromium at
 each step: a 2 s pinch moves the stand-in on every frame while the real window keeps its size, then the real window
 takes the final size and the stand-in goes; two quick pinches share one stand-in; edge and corner drags keep the
-aspect ratio and the opposite edge or corner; the real window stays able to take the rest of the gesture under the stand-in; a pinch right after a mouse resize grows the window (it once divided by
+aspect ratio and the opposite edge or corner; the real window stays able to take the rest of the gesture under the stand-in; a window parked past the screen edge resizes where it is; a pinch right after a mouse resize grows the window (it once divided by
 a stale zero aspect and crashed); and each gesture sends one pictureInPictureStandIn or pictureInPictureResized event.
 
   node apps/browser/scripts/pip-resize-test.mjs <Debug app> [--out DIR] [--keep]
@@ -40,6 +40,10 @@ const data = join(out, "data");
 mkdirSync(media, { recursive: true });
 
 const clip = join(media, "clip.mp4");
+const wideClip = join(media, "wide.mp4");
+if (!existsSync(wideClip))
+  execFileSync("ffmpeg", ["-hide_banner", "-loglevel", "error", "-y", "-f", "lavfi", "-i", "testsrc2=s=640x270:r=30", "-t", "120",
+    "-c:v", "libx264", "-preset", "veryfast", "-crf", "30", "-pix_fmt", "yuv420p", "-movflags", "+faststart", wideClip], { stdio: "inherit" });
 if (!existsSync(clip))
   execFileSync("ffmpeg", ["-hide_banner", "-loglevel", "error", "-y", "-f", "lavfi", "-i", "testsrc2=s=640x360:r=30", "-t", "120",
     "-c:v", "libx264", "-preset", "veryfast", "-crf", "30", "-pix_fmt", "yuv420p", "-movflags", "+faststart", clip], { stdio: "inherit" });
@@ -227,6 +231,83 @@ try {
     await drag("dragging the top edge up makes the window taller and keeps its bottom edge", (s) => [Math.round(s.width / 2), 2], [0, -60],
       (b, a) => (a.height < b.height + 50 ? `height ${a.height}` : Math.abs(a.y - b.y) > 1 ? `bottom edge moved to ${a.y}` : null));
 
+    await r.check("a window parked past the screen edge is resized where it is, by a pinch or an edge drag, and not pulled back on screen", async () => {
+      const [vx, , vw] = await engine("tabs.devPictureInPicture").then((ws) => rect(ws.find((w) => w.video && w.styled && w.visible).visibleFrame));
+      const edge = vx + vw;
+      const home = await state();
+      await pip(`frame:{{${Math.round(edge - home.width * 0.7)}, ${home.y}}, {${home.width}, ${home.height}}}`);
+      await sleep(600);
+      const parked = await state();
+      const right = (s) => s.x + s.width;
+      if (right(parked) < edge + parked.width * 0.2) throw new Error(`couldn't park it past the edge: ${JSON.stringify(parked)}`);
+      try {
+        await pip("pinch:1.3,300,120");
+        await sleep(150);
+        const standIn = Number(await pip("standIn"));
+        const covered = execFileSync("/usr/bin/swift", ["-e", `import CoreGraphics; let l = CGWindowListCopyWindowInfo([.optionAll], kCGNullWindowID) as! [[String: Any]]; if let w = l.first(where: { ($0[kCGWindowNumber as String] as? Int) == ${standIn} }), let b = w[kCGWindowBounds as String] as? [String: Double] { print(b["X"]!, b["Width"]!) }`]).toString().trim().split(" ").map(Number);
+        if (covered.length !== 2 || covered[0] > parked.x + 1 || covered[0] + covered[1] < right(parked) - 1)
+          throw new Error(`the stand-in spans ${covered[0]}..${covered[0] + covered[1]} and the window ${parked.x}..${right(parked)}: the part past the edge has no stand-in`);
+        await sleep(400);
+        await until("the hand-off", async () => !(await pip("standIn")), 5000);
+        const grown = await state();
+        if (grown.width <= parked.width + 20) throw new Error(`the pinch didn't grow it: ${size(grown)}`);
+        if (Math.abs(right(grown) - right(parked)) > 1) throw new Error(`growing moved its hidden edge from ${right(parked)} to ${right(grown)} (the screen ends at ${edge})`);
+        await pip("pinch:0.8,24,120");
+        await sleep(400);
+        await until("the hand-off", async () => !(await pip("standIn")), 5000);
+        const shrunk = await state();
+        if (shrunk.width >= grown.width - 20) throw new Error(`the pinch didn't shrink it: ${size(shrunk)}`);
+        if (right(shrunk) <= edge + 1 || right(shrunk) > right(grown) + 1 || shrunk.x < grown.x - 1) throw new Error(`shrinking moved it to ${shrunk.x}..${right(shrunk)} from ${grown.x}..${right(grown)} (the screen ends at ${edge})`);
+        const y = Math.round(shrunk.height / 2);
+        await pip(`mouse:down:2,${y}`);
+        await sleep(60);
+        for (let i = 1; i <= 8; i++) {
+          await pip(`mouse:dragged:${Math.round(2 - (60 * i) / 8)},${y}`);
+          await sleep(16);
+        }
+        await pip(`mouse:up:-58,${y}`);
+        await until("the hand-off", async () => !(await pip("standIn")), 5000);
+        const dragged = await state();
+        if (dragged.width <= shrunk.width + 20) throw new Error(`the edge drag didn't widen it: ${size(dragged)}`);
+        if (Math.abs(right(dragged) - right(shrunk)) > 1) throw new Error(`the edge drag moved its hidden edge from ${right(shrunk)} to ${right(dragged)}`);
+        return { edge, parked: `${parked.x}..${right(parked)}`, grown: `${grown.x}..${right(grown)}`, shrunk: `${shrunk.x}..${right(shrunk)}`, dragged: `${dragged.x}..${right(dragged)}` };
+      } finally {
+        await pip(`frame:{{${home.x}, ${home.y}}, {${home.width}, ${home.height}}}`);
+        await sleep(600);
+      }
+    });
+    await r.check("shrinking a window parked past the edge by its visible edge leaves it where it is, not tucked away", async () => {
+      const [vx, , vw] = await engine("tabs.devPictureInPicture").then((ws) => rect(ws.find((w) => w.video && w.styled && w.visible).visibleFrame));
+      const edge = vx + vw;
+      const home = await state();
+      await pip(`frame:{{${Math.round(edge - home.width * 0.6)}, ${home.y}}, {${home.width}, ${home.height}}}`);
+      await sleep(600);
+      const parked = await state();
+      const hidden = (s) => s.x + s.width - edge;
+      if (hidden(parked) < parked.width * 0.3 || (await shown()).stashed) throw new Error(`couldn't park it past the edge: ${JSON.stringify(parked)}`);
+      try {
+        const y = Math.round(parked.height / 2), by = Math.round(parked.width * 0.3);
+        await pip(`mouse:down:2,${y}`);
+        await sleep(60);
+        for (let i = 1; i <= 8; i++) {
+          await pip(`mouse:dragged:${Math.round(2 + (by * i) / 8)},${y}`);
+          await sleep(16);
+        }
+        await pip(`mouse:up:${2 + by},${y}`);
+        await until("the hand-off", async () => !(await pip("standIn")), 5000);
+        await sleep(900);
+        const after = await state(), tucked = (await shown()).stashed;
+        if (after.width >= parked.width - 20) throw new Error(`the drag didn't shrink it: ${size(after)}`);
+        if (tucked) throw new Error(`it was tucked away at the edge (stashed ${tucked}) with ${hidden(after)} of ${after.width} pt past the edge`);
+        if (hidden(after) > after.width / 2 + 1) throw new Error(`${hidden(after)} of ${after.width} pt is past the edge, more than half`);
+        return { parked: `${hidden(parked)} of ${parked.width} pt hidden`, after: `${hidden(after)} of ${after.width} pt hidden` };
+      } finally {
+        if ((await shown())?.stashed) await pip("unstash");
+        await sleep(400);
+        await pip(`frame:{{${home.x}, ${home.y}}, {${home.width}, ${home.height}}}`);
+        await sleep(600);
+      }
+    });
     await r.check("a pinch right after a mouse resize grows the window with its aspect ratio", async () => {
       const before = await state();
       await pip("pinch:1.3,60,120");
@@ -239,6 +320,89 @@ try {
   }
 
   if (ok) {
+    await r.check("a press or a two-finger move on the window while another app is active asks for Ardia to become active with only that window in front", async () => {
+      const asked = async () => (await engine("tabs.devEvents", { tabId })).filter((e) => e.name === "pictureInPictureActivated");
+      const appActive = async (on) => {
+        const native = (await engine("windows.list"))[0]?.window;
+        const answer = await engine("windows.dev", { window: native, action: `fakeAppActive:${on ? 1 : 0}` });
+        if (answer !== (on ? "1" : "0")) throw new Error(`fakeAppActive: ${JSON.stringify(answer)}`);
+      };
+      await appActive(true);
+      const whileActive = (await asked()).length;
+      const s0 = await state();
+      await pip(`mouse:down:${Math.round(s0.width / 2)},${Math.round(s0.height / 2)}`);
+      await pip(`mouse:up:${Math.round(s0.width / 2)},${Math.round(s0.height / 2)}`);
+      await sleep(400);
+      if ((await asked()).length !== whileActive) throw new Error("a press asked for activation while Ardia was already active");
+      await appActive(false);
+      try {
+      const before = (await asked()).length;
+      const s = await state();
+      const [x, y] = [Math.round(s.width / 2), Math.round(s.height / 2)];
+      await pip(`mouse:down:${x},${y}`);
+      await pip(`mouse:up:${x},${y}`);
+      const pressed = await until("the press's event", async () => ((await asked()).length > before ? asked() : null), 3000);
+      await pip("swipe:30,0,6");
+      const moved = await until("the move's event", async () => ((await asked()).length > before + 1 ? asked() : null), 3000);
+      const flags = (e) => `${e.payload?.move ?? e.move}`;
+      if (flags(pressed.at(-1)) !== "false") throw new Error(`the press reported move ${flags(pressed.at(-1))}`);
+      if (flags(moved.at(-1)) !== "true") throw new Error(`the move reported move ${flags(moved.at(-1))}`);
+      return `${(await asked()).length - before} events`;
+      } finally {
+        await appActive(true).catch(() => null);
+        await sleep(900);
+      }
+    });
+    await r.check("a pinch after the video changed shape keeps the window at the video's new shape", async () => {
+      const page = await instance.page(url, { timeout: 5000 });
+      const play = (src) => page.eval(`(async () => { const v = document.getElementById("v"); v.src = ${JSON.stringify(src)}; await new Promise((r) => v.addEventListener("loadedmetadata", r, { once: true })); await v.play(); return v.videoWidth / v.videoHeight; })()`, { timeout: 15000 });
+      const ratio = (s) => s.width / s.height;
+      const before = await state();
+      try {
+        const wide = await play("wide.mp4");
+        const reshaped = await until("Chromium to give the window the new shape", async () => { const s = await state(); return s && Math.abs(ratio(s) - wide) < 0.05 ? s : null; }, 8000);
+        if (Math.abs(reshaped.width - before.width) > 1) throw new Error(`inconclusive: Chromium changed the width too (${before.width} to ${reshaped.width}), so the stale ratio would be dropped anyway`);
+        await pip("pinch:1.15,24,120");
+        await sleep(400);
+        await until("the hand-off", async () => !(await pip("standIn")), 5000);
+        await sleep(400);
+        const pinched = await state();
+        if (pinched.width <= reshaped.width + 10) throw new Error(`the pinch didn't grow it: ${size(pinched)}`);
+        if (Math.abs(ratio(pinched) - wide) > 0.05) throw new Error(`the pinch left it ${size(pinched)}, ratio ${ratio(pinched).toFixed(2)}; the video is ${wide.toFixed(2)} and the window was ${ratio(before).toFixed(2)} before the change`);
+        return { before: size(before), reshaped: size(reshaped), pinched: size(pinched), video: wide.toFixed(2) };
+      } finally {
+        await play("clip.mp4").catch(() => null);
+        await sleep(1500);
+      }
+    });
+    await r.check("a pinch that starts right after a swipe ends isn't interrupted by the swipe's release", async () => {
+      const lastSwipe = async () => JSON.stringify(JSON.parse(await pip("throw")).lastSwipe);
+      const settle = async () => {
+        await sleep(400);
+        await until("the hand-off", async () => !(await pip("standIn")), 5000);
+        await sleep(600);
+      };
+      const before = await lastSwipe();
+      await pip("swipe:-40,30,10");
+      await sleep(900);
+      const alone = await lastSwipe();
+      if (alone === before) throw new Error("inconclusive: a slow swipe with nothing after it recorded no release");
+      const tries = [];
+      for (let i = 0; i < 3; i++) {
+        const was = await lastSwipe(), releases = await eventCount("pictureInPictureReleased");
+        const swiped = pip("swipe:40,-30,10");
+        await sleep(110);
+        await Promise.all([swiped, pip("pinch:1.1,12,120")]);
+        await settle();
+        tries.push((await lastSwipe()) === was ? "left alone" : "released");
+        if (tries.at(-1) === "left alone") {
+          const counted = (await eventCount("pictureInPictureReleased")) - releases;
+          if (counted !== 1) throw new Error(`the swipe the pinch cut short was counted ${counted} times, not once`);
+          return { tries };
+        }
+      }
+      throw new Error(`the swipe's release ran under the pinch every time: ${tries.join(", ")}`);
+    });
     await r.check("closing Picture in Picture in the middle of a pinch takes the stand-in away", async () => {
       await pip("pinch:1.5,240,120");
       await sleep(400);
@@ -251,6 +415,31 @@ try {
       const left = execFileSync("sh", ["-c", `/usr/bin/swift -e 'import CoreGraphics; let l = CGWindowListCopyWindowInfo([.optionAll], kCGNullWindowID) as! [[String: Any]]; print(l.contains { ($0[kCGWindowNumber as String] as? Int) == ${Number(standIn)} && (($0[kCGWindowIsOnscreen as String] as? Bool) ?? false) })' 2>/dev/null || echo unknown`]).toString().trim();
       if (left !== "false") throw new Error(`the stand-in window ${standIn} is still on screen (${left})`);
       return { standIn, pipWindows: panels?.length ?? 0 };
+    });
+    await r.check("a press that asked for activation is still reported when the window closes before the report", async () => {
+      const page = await instance.page(url, { timeout: 5000 });
+      const entered = await page.eval("document.getElementById('v').requestPictureInPicture().then(() => 'ok', (e) => String(e))", { userGesture: true });
+      if (entered !== "ok") throw new Error(`no PiP: ${entered}`);
+      await until("the styled PiP window", shown, 8000);
+      const asked = async () => (await engine("tabs.devEvents", { tabId })).filter((e) => e.name === "pictureInPictureActivated").length;
+      const native = (await engine("windows.list"))[0]?.window;
+      await engine("windows.dev", { window: native, action: "fakeAppActive:0" });
+      try {
+        const before = await asked();
+        const s = await state();
+        await pip(`mouse:down:${Math.round(s.width / 2)},${Math.round(s.height / 2)}`);
+        await pip(`mouse:up:${Math.round(s.width / 2)},${Math.round(s.height / 2)}`);
+        await page.eval("document.exitPictureInPicture().then(() => 'ok', (e) => String(e))");
+        await until("the window to close", async () => !(await shown()), 1200);
+        if ((await asked()) !== before) throw new Error("inconclusive: the report came before the window had closed");
+        await until("the report after the close", async () => (await asked()) > before, 4000);
+        await sleep(400);
+        const reported = (await asked()) - before;
+        if (reported !== 1) throw new Error(`${reported} reports for one press`);
+        return "the window closed first, then 1 report";
+      } finally {
+        await engine("windows.dev", { window: native, action: "fakeAppActive:1" }).catch(() => null);
+      }
     });
   }
 
