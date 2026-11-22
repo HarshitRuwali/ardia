@@ -1,7 +1,7 @@
 import type { ViewProps } from "react-native";
 import type { ExternalAppRequest } from "./permissions";
 import type { FaviconImage } from "./favicons";
-import type { PageCookie, PageEngine } from "./webkit";
+import type { ChromiumSiteDataReply, ChromiumSiteDataRequest, PageCookie, PageEngine } from "./webkit";
 
 export type NavigationState = {
   url: string;
@@ -125,6 +125,8 @@ export type PictureInPictureDrag = { offCursor: boolean; slowMove: boolean; epoc
 export type PictureInPictureSkip = { seconds: number; epoch: string };
 export type PictureInPictureStandIn = { pinch: boolean; timedOut: boolean; epoch: string };
 export type PictureInPictureUnstash = { epoch: string };
+export type PictureInPictureReleaseOutcome = "corner" | "flickTuck" | "tuck" | "pullOut" | "cornerPull" | "placed";
+export type PictureInPictureRelease = { outcome: PictureInPictureReleaseOutcome; epoch: string };
 export type PictureInPictureActivation = { move: boolean; activated: boolean; epoch: string };
 export type PictureInPictureResize = { inside: boolean; cursorShown: boolean; epoch: string };
 export type AutoPictureInPictureHold = "onScreen" | "appSwitch" | "nothingPlaying";
@@ -226,6 +228,7 @@ export type WebViewProps = ViewProps & {
   onPictureInPictureSkip?: (skip: PictureInPictureSkip) => void;
   onPictureInPictureStandIn?: (standIn: PictureInPictureStandIn) => void;
   onPictureInPictureUnstashed?: (unstash: PictureInPictureUnstash) => void;
+  onPictureInPictureReleased?: (release: PictureInPictureRelease) => void;
   onPictureInPictureActivated?: (activation: PictureInPictureActivation) => void;
   onMediaFault?: (fault: MediaFault) => void;
   onActivateRequest?: (request: ActivateRequest) => void;
@@ -285,6 +288,7 @@ export type WebViewHandle = {
 
   getSecurityInfo(): Promise<SecurityInfo | null>;
   pageCookies(urls: string[]): Promise<PageCookie[]>;
+  siteData(request: ChromiumSiteDataRequest): Promise<ChromiumSiteDataReply | null>;
   openBlockedPopup(id: string, always?: boolean): Promise<void>;
   clearSiteData(): Promise<{ cookies: number | false; storage: boolean }>;
 

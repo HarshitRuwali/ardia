@@ -64,7 +64,7 @@ export const advancedRows = {
         websiteEngines: {
           title: "Engine per site",
           description: "Sites that always open in a chosen engine.",
-          keywords: ["opens in", "site engine", "rule", "webkit", "chromium", "website rules", "drm", "netflix", "disney", "hbo", "max", "prime video", "hulu", "spotify", "apple tv", "apple music", "fairplay", "widevine", "streaming", "tencent video", "v.qq.com", "audible", "audiobooks", "canal+", "canalplus", "mycanal", "youtube tv", "tv.youtube.com", "open streaming sites in webkit"],
+          keywords: ["opens in", "site engine", "rule", "webkit", "chromium", "website rules", "drm", "netflix", "disney", "hbo", "max", "prime video", "hulu", "spotify", "apple tv", "apple music", "fairplay", "widevine", "streaming", "tencent video", "v.qq.com", "audible", "audiobooks", "canal+", "canalplus", "mycanal", "youtube tv", "tv.youtube.com", "osn+", "osnplus", "anghami", "open streaming sites in webkit"],
           shown: automaticEngine,
           needs: NEEDS_AUTOMATIC,
         },
@@ -93,6 +93,13 @@ export const advancedRows = {
           explained: true,
           description: "Switching engines reloads the page, so text you haven't sent can be lost.",
           keywords: ["unsaved", "form", "input", "confirm", "warn", "stay on page", "switch engine", "switching engines"],
+          shown: webKitOffered,
+        },
+        engineSwitchCarriesSiteData: {
+          title: "Bring sign-ins along",
+          explained: true,
+          description: "A page that switches engines takes its site's cookies and saved data with it, so you stay signed in.",
+          keywords: ["bring sign-ins", "cookies", "site data", "sign in", "logged out", "local storage", "session", "switch engine", "separate sign-ins"],
           shown: webKitOffered,
         },
       },
