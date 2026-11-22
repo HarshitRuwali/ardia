@@ -109,7 +109,7 @@ test("Little Ardia and utility windows opened floating are counted apart, sent w
   placement.noteWindowOpenedFloating(true, consent());
   client.setSharing(true, "settings");
   placement.noteWindowOpenedFloating(true, before);
-  assert.deepEqual(placement.takeWindowPlacementCounts(), { window_centered_resizes: 0, windows_reopened_maximized: 0, window_titles_read: 0, window_drag_loops: 0, window_close_pins_kept: 0, little_ardia_opened_floating: 0, utility_windows_opened_floating: 0, linux_windows_app_decorated: 0, linux_windows_compositor_decorated: 0, linux_decoration_answers_none: 0, linux_decoration_answers_client: 0, linux_decoration_answers_server: 0 });
+  assert.deepEqual(placement.takeWindowPlacementCounts(), { window_centered_resizes: 0, windows_reopened_maximized: 0, window_titles_read: 0, window_drag_loops: 0, window_close_pins_kept: 0, little_ardia_opened_floating: 0, utility_windows_opened_floating: 0, linux_windows_app_decorated: 0, linux_windows_compositor_decorated: 0, linux_decoration_answers_none: 0, linux_decoration_answers_client: 0, linux_decoration_answers_server: 0, linux_page_viewports_rejected: 0 });
 });
 
 test("floating windows counted in one consent period are dropped when the period changes, not reported in the next", async () => {
@@ -144,4 +144,22 @@ test("on Linux each window's decoration and the desktop's answer are counted by 
   client.setSharing(false, "settings");
   placement.noteLinuxWindowDecorations("app", "none");
   assert.equal(placement.takeWindowPlacementCounts().linux_windows_app_decorated, 0);
+});
+
+test("on Linux a page viewport the engine refused is counted with the consent of its send", async () => {
+  client.loadChoice();
+  client.setSharing(true, "onboarding");
+  placement.noteLinuxPageViewportRejected(client.consentToken());
+  placement.noteLinuxPageViewportRejected(client.consentToken());
+  usage.sessionEnding();
+  await client.saveQueueNow();
+  const saved = JSON.parse(stub.docs.get("telemetry-queue.json") ?? '{"events":[]}');
+  assert.equal(saved.events.filter((e) => e.event === "usage_counts").at(-1).properties.linux_page_viewports_rejected, 2);
+  client.setSharing(false, "settings");
+  const off = client.consentToken();
+  placement.noteLinuxPageViewportRejected(off);
+  client.setSharing(true, "settings");
+  placement.noteLinuxPageViewportRejected(off);
+  assert.equal(placement.takeWindowPlacementCounts().linux_page_viewports_rejected, 0);
+  client.setSharing(false, "settings");
 });
