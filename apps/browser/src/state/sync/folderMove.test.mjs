@@ -321,3 +321,40 @@ test("when the old folder is gone, a folder with this chain's files is pointed a
   assert.deepEqual(await moveChain(native, "/gone", "/moved-by-hand", ["app"]), { ok: "joined" });
   assert.deepEqual(await moveChain(native, "/gone", "/empty", ["app"]), { error: "unreadable" });
 });
+
+test("Stop and Delete asked for during a move deletes the sync data in the folder shown and the one it moved to", async () => {
+  reset();
+  const engine = await import("./engine.ts?stopdelete");
+  engine.startSync();
+  assert.ok("ok" in (await engine.turnOnSync("/home/someone/Ardia Sync", "picked")));
+  await engine.syncNow();
+  const moving = engine.moveSyncFolder("/home/someone/Nextcloud/Ardia Sync");
+  await engine.stopSync({ deleteData: true });
+  assert.deepEqual(await moving, { ok: "moved" });
+  assert.equal(engine.useSync.getState().enabled, false);
+  assert.ok(!chainOf("/home/someone/Ardia Sync").has(OURS), "the folder the person was looking at doesn't keep the data they asked to delete");
+  assert.ok(!chainOf("/home/someone/Nextcloud/Ardia Sync").has(OURS));
+});
+
+test("a recovery phrase or a Turn On asked for during a move waits for it, so the move can't point sync back at its own folder", async () => {
+  reset();
+  const engine = await import("./engine.ts?phrase-during-move");
+  engine.startSync();
+  assert.ok("ok" in (await engine.turnOnSync("/home/someone/Ardia Sync", "picked")));
+  await engine.syncNow();
+  plant("/elsewhere", OURS);
+  const enterPhrase = native.enterPhrase;
+  native.enterPhrase = async () => ({ ok: true });
+  try {
+    const moving = engine.moveSyncFolder("/home/someone/Nextcloud/Ardia Sync");
+    assert.ok("ok" in (await engine.enterRecoveryPhrase("/elsewhere", "words")));
+    assert.deepEqual(await moving, { ok: "moved" });
+    assert.equal(engine.useSync.getState().folder, "/elsewhere");
+    const movingAgain = engine.moveSyncFolder("/home/someone/Dropbox/Ardia Sync");
+    assert.ok("ok" in (await engine.turnOnSync("/home/someone/Fresh/Ardia Sync", "picked")));
+    assert.deepEqual(await movingAgain, { ok: "moved" });
+    assert.equal(engine.useSync.getState().folder, "/home/someone/Fresh/Ardia Sync");
+  } finally {
+    native.enterPhrase = enterPhrase;
+  }
+});

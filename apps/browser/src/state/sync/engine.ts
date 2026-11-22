@@ -78,6 +78,9 @@ function scheduleSync(delay = AFTER_EDIT_MS) {
 
 let stopping = false;
 let moveRun: Promise<FolderMoveResult> | null = null;
+const moveSettled = async () => {
+  while (moveRun) await moveRun.catch(() => {});
+};
 
 export const syncWritesOpen = () => doc.enabled && !stopping && !["starting", "locked", "off", "unavailable"].includes(useSync.getState().status);
 
@@ -221,9 +224,7 @@ function pointAt(path: string) {
   publishUi();
 }
 
-export function setSyncFolder(path: string) {
-  if (!doc.enabled) pointAt(path);
-}
+export const setSyncFolder = (path: string) => void (doc.enabled || pointAt(path));
 
 export async function chooseSyncFolder(): Promise<string | null> {
   const picked = (await SyncNative?.chooseFolder(doc.folder)) ?? null;
@@ -256,6 +257,7 @@ function begin(folder: string, deviceId: string, joining: boolean) {
 export async function turnOnSync(folder: string, how?: TurnOnFolder): Promise<{ ok: true } | { error: string }> {
   const native = SyncNative;
   if (!native) return { error: "Sync isn’t available in this build." };
+  await moveSettled();
   const deviceId = native.newDeviceId();
   try {
     if (!(await native.createPhrase(deviceId))) return { error: `Couldn’t save the sync key in ${PLATFORM_TERMS.secretStore}.` };
@@ -272,6 +274,7 @@ export async function turnOnSync(folder: string, how?: TurnOnFolder): Promise<{ 
 export async function enterRecoveryPhrase(folder: string, text: string): Promise<PhraseResult | { error: "unavailable" }> {
   const native = SyncNative;
   if (!native) return { error: "unavailable" };
+  await moveSettled();
   if (doc.enabled && doc.deviceId && useSync.getState().status === "locked") {
     const result = await native.enterPhrase(doc.deviceId, text, doc.folder ?? folder);
     if ("ok" in result) {
@@ -288,26 +291,22 @@ export async function enterRecoveryPhrase(folder: string, text: string): Promise
 }
 
 export async function stopSync({ deleteData = false } = {}) {
-  const native = SyncNative, consent = consentToken();
-  while (moveRun) await moveRun.catch(() => {});
+  const native = SyncNative, consent = consentToken(), shown = doc.folder;
+  await moveSettled();
   if (!native || !doc.enabled || stopping) return;
   stopping = true;
-  await retire(native, deleteData, consent).finally(() => (stopping = false));
+  await retire(native, deleteData ? [...new Set([doc.folder, shown])] : [], consent).finally(() => (stopping = false));
 }
 
-async function retire(native: NonNullable<typeof SyncNative>, deleteData: boolean, consent: ConsentToken | null) {
+async function retire(native: NonNullable<typeof SyncNative>, deleteIn: (string | null)[], consent: ConsentToken | null) {
   clearTimeout(timer);
   const reportFailure = (error: unknown) => warnFor(consent, "[sync] the last cycle before stopping failed", error);
   while (cycle) await cycle.catch(reportFailure);
   if (useSync.getState().status !== "locked") await runCycle({ retiring: true }).catch(reportFailure);
   clearTimeout(timer);
   const folder = doc.folder;
-  if (deleteData && folder) {
-    try {
-      await native.deleteChain(folder);
-    } catch (error) {
-      warnFor(consent, "[sync] deleting sync data failed", error);
-    }
+  for (const target of deleteIn) {
+    if (target) await native.deleteChain(target).catch((error: unknown) => warnFor(consent, "[sync] deleting sync data failed", error));
   }
   if (doc.deviceId) await native.forget(doc.deviceId);
   doc = { ...emptyDoc(), folder, types: doc.types };
