@@ -109,7 +109,7 @@ test("Little Ardia and utility windows opened floating are counted apart, sent w
   placement.noteWindowOpenedFloating(true, consent());
   client.setSharing(true, "settings");
   placement.noteWindowOpenedFloating(true, before);
-  assert.deepEqual(placement.takeWindowPlacementCounts(), { window_centered_resizes: 0, windows_reopened_maximized: 0, window_titles_read: 0, window_drag_loops: 0, window_close_pins_kept: 0, little_ardia_opened_floating: 0, utility_windows_opened_floating: 0 });
+  assert.deepEqual(placement.takeWindowPlacementCounts(), { window_centered_resizes: 0, windows_reopened_maximized: 0, window_titles_read: 0, window_drag_loops: 0, window_close_pins_kept: 0, little_ardia_opened_floating: 0, utility_windows_opened_floating: 0, linux_windows_app_decorated: 0, linux_windows_compositor_decorated: 0, linux_decoration_answers_none: 0, linux_decoration_answers_client: 0, linux_decoration_answers_server: 0 });
 });
 
 test("floating windows counted in one consent period are dropped when the period changes, not reported in the next", async () => {
@@ -123,4 +123,23 @@ test("floating windows counted in one consent period are dropped when the period
   client.setSharing(true, "settings");
   const taken = placement.takeWindowPlacementCounts();
   assert.deepEqual([taken.little_ardia_opened_floating, taken.utility_windows_opened_floating], [0, 0]);
+test("on Linux each window's decoration and the desktop's answer are counted by name, and unknown names are not", async () => {
+  client.loadChoice();
+  client.setSharing(true, "onboarding");
+  placement.noteLinuxWindowDecorations("compositor", "server");
+  placement.noteLinuxWindowDecorations("app", "none");
+  placement.noteLinuxWindowDecorations("app", "client");
+  placement.noteLinuxWindowDecorations("toString", "__proto__");
+  placement.noteLinuxWindowDecorations(undefined, 3);
+  usage.sessionEnding();
+  await client.saveQueueNow();
+  const saved = JSON.parse(stub.docs.get("telemetry-queue.json") ?? '{"events":[]}');
+  const sent = saved.events.filter((e) => e.event === "usage_counts").at(-1).properties;
+  assert.deepEqual(
+    [sent.linux_windows_app_decorated, sent.linux_windows_compositor_decorated, sent.linux_decoration_answers_none, sent.linux_decoration_answers_client, sent.linux_decoration_answers_server],
+    [2, 1, 1, 1, 1],
+  );
+  client.setSharing(false, "settings");
+  placement.noteLinuxWindowDecorations("app", "none");
+  assert.equal(placement.takeWindowPlacementCounts().linux_windows_app_decorated, 0);
 });
