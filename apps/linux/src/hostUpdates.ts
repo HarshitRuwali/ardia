@@ -7,6 +7,7 @@ import { channelOf, compareVersions, isAppVersion, linuxReleases, newestRelease,
 import {
   UPDATE_INSTALL_FAILURES,
   UPDATE_DOWNLOAD_FAILURES,
+  noteManagedUpdateOffer,
   noteUpdateCheck,
   noteUpdateDownloadFailed,
   noteUpdateDownloadFinished,
@@ -33,8 +34,11 @@ export const FOLLOW_RUN_FOR_MS = 75 * 60 * 1000;
 export const UPDATE_CHECK_LOCK = "ardia.linux.update-checks";
 export const UPDATE_PREFERENCES_LOCK = "ardia.linux.update-preferences";
 export const AUR_UPDATE_COMMAND = "yay -Syu ardia-bin";
+export const FLATPAK_ID = "dev.ardia.Ardia";
+export const FLATPAK_UPDATE_COMMAND = `flatpak update ${FLATPAK_ID}`;
 
 export type InstallKind = UpdateInstallKind | "managed" | "unsupported";
+export type PackageManager = "flatpak" | "package";
 type Phase = "idle" | "downloading" | "installing" | "ready" | "failed";
 export type EngineStatus = { phase: Phase; version: string | null; reason: string | null; kind: InstallKind; run: number };
 type Preferences = { automaticChecks: boolean; automaticDownloads: boolean; lastCheck: number | null; channel: UpdateChannel | null; notified: string | null; failed: string | null };
@@ -56,7 +60,7 @@ export type UpdateDeps = {
   offer: (release: Release, failed: boolean) => void;
   offerInstall: (release: Release, install: () => void) => void;
   ready: (version: string, restart: () => void) => void;
-  managed: (release: Release, current: string, asked: boolean) => Promise<void>;
+  managed: (release: Release, current: string, asked: boolean, manager: PackageManager) => Promise<void>;
   open: (url: string) => void;
   showsToasts?: boolean;
   locks?: UpdateLocks;
@@ -87,6 +91,7 @@ export function readEngineStatus(answer: unknown): EngineStatus | null {
 const knownKinds = new WeakMap<ArdiaHost, InstallKind>();
 export const installsUpdates = (host: ArdiaHost | undefined) => !!host && installs(knownKinds.get(host));
 export const selfUpdateAvailable = (host: ArdiaHost) => SELF_UPDATE_METHODS.every((method) => hostSupports(method, host));
+export const packageManager = (host: ArdiaHost): PackageManager => (hostLaunchConfig(host).configDirectory.includes(`/.var/app/${FLATPAK_ID}/`) ? "flatpak" : "package");
 const releasePage = (version: string): Release => ({ version, url: `${RELEASES_PAGE}/tag/v${version}`, prerelease: channelOf(version) === "nightly" });
 
 function readPreferences(read: UpdateDeps["read"]): Preferences {
@@ -236,9 +241,10 @@ export function linuxUpdater(deps: UpdateDeps) {
   async function deliver(release: Release, current: string, asked: boolean, saved: Preferences, consent: ConsentToken | null) {
     const status = await engineStatus();
     if (status?.kind === "managed") {
-      if (asked) return deps.managed(release, current, true);
-      if (await offeredOnce(release)) await deps.managed(release, current, false);
-      return;
+      const manager = packageManager(deps.host);
+      if (!asked && !(await offeredOnce(release))) return;
+      noteManagedUpdateOffer(manager, consent);
+      return deps.managed(release, current, asked, manager);
     }
     if (status && installs(status.kind)) {
       if (status.phase === "ready") {
