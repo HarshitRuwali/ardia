@@ -123,6 +123,8 @@ test("floating windows counted in one consent period are dropped when the period
   client.setSharing(true, "settings");
   const taken = placement.takeWindowPlacementCounts();
   assert.deepEqual([taken.little_ardia_opened_floating, taken.utility_windows_opened_floating], [0, 0]);
+});
+
 test("on Linux each window's decoration and the desktop's answer are counted by name, and unknown names are not", async () => {
   client.loadChoice();
   client.setSharing(true, "onboarding");
