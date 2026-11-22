@@ -523,8 +523,8 @@ a `.sha256` file beside it (`sha256sum -c <asset>.sha256` checks a download):
   dnf and zypper pull in the libraries Ardia needs, computed from its binaries. The package makes `chrome-sandbox`
   setuid root and, where AppArmor reads the 4.0 ABI, installs the AppArmor profile. The `.rpm` isn't signed yet, which
   is why zypper needs `--allow-unsigned-rpm`. A newer `.rpm` installs over an older one (a nightly's version,
-  `0.2.47~nightly.3`, sorts before its stable). There is no repository yet, so updates are the same command with the
-  new release's `.rpm`; Ardia says when one is out but leaves installing it to dnf or zypper. `sudo dnf remove ardia`
+  `0.2.47~nightly.3`, sorts before its stable). There is no repository yet (#3644), so updates are the same command
+  with the new release's `.rpm`; Ardia says when one is out but leaves installing it to dnf or zypper. `sudo dnf remove ardia`
   or `sudo zypper remove ardia` leaves nothing behind outside your home folder.
 - **Immutable distributions and any distribution with Flatpak: the `.flatpak`.**
 
@@ -750,10 +750,10 @@ command ([linux-ci.md](linux-ci.md) › Linux releases).
   - **Updates.** `ardia-update kind` says `managed` inside a Flatpak, so Ardia only tells you about a release, naming
     `flatpak update dev.ardia.Ardia` (it knows it is a Flatpak by its data folder under `~/.var/app/dev.ardia.Ardia/`).
   - **Known limits.** Native messaging hosts (password managers' browser bridges) run outside the sandbox, so
-    Flatpak Ardia can't start them. Setting Ardia as the default browser from Settings needs `xdg-settings`, which
-    the runtime lacks: set it in the desktop's settings. The polkit reauthentication action can't be installed from a
-    Flatpak, so revealing saved passwords asks for the login password. The `ardia` command isn't set up from a
-    Flatpak.
+    Flatpak Ardia can't start them (#3642). Setting Ardia as the default browser from Settings needs `xdg-settings`,
+    which the runtime lacks: set it in the desktop's settings (#3643). The bundle has no remote, so `flatpak update`
+    doesn't see new releases until Ardia is on Flathub (#3645). The polkit reauthentication action can't be installed
+    from a Flatpak, so revealing saved passwords falls back to the login password.
 
   `scripts/linux/flatpak-install-test.sh <bundle>` installs the bundle as an ordinary user in privileged
   `ubuntu:24.04` and `fedora:43` containers: the runtime comes from Flathub, the ref is `app/dev.ardia.Ardia/x86_64/stable`

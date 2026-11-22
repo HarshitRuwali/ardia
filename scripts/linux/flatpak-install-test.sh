@@ -36,10 +36,11 @@ if command -v apt-get >/dev/null; then
   apt-get install -y -qq flatpak dbus curl procps >/dev/null 2>&1
 else
   echo "retries=5" >> /etc/dnf/dnf.conf
-  dnf install -y -q flatpak dbus-daemon curl procps-ng >/dev/null 2>&1
+  dnf install -y -q flatpak dbus-daemon curl procps-ng util-linux shadow-utils >/dev/null 2>&1
 fi
 mkdir -p /run/dbus
 dbus-daemon --system --fork
+flatpak remote-add --system --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
 useradd -m tester
 su tester -c "dbus-run-session -- bash -c \"\$CHECK\""
 '
@@ -60,7 +61,7 @@ grep -q "Ref: app/$app/x86_64/stable" <<<"$info" || fail "the bundle is not app/
 grep -q "Runtime: org.freedesktop.Platform/x86_64/" <<<"$info" || fail "no freedesktop runtime: $info"
 flatpak list --user --runtime --columns=ref,origin | grep -q "^org.freedesktop.Platform/x86_64/.*flathub" || fail "the runtime did not come from Flathub"
 echo "ok   $(grep -m1 "Version:" <<<"$info" | xargs), runtime from Flathub, branch stable"
-version=$(flatpak run "$app" --version 2>/dev/null) || fail "ardia --version exited $?"
+version=$(flatpak run "$app" --version 2>/tmp/version.log) || { status=$?; tail -20 /tmp/version.log; fail "ardia --version exited $status"; }
 echo "ok   $version"
 desktop=$exports/applications/$app.desktop
 test -f "$desktop" || fail "no exported $app.desktop"
@@ -82,7 +83,7 @@ filesystems=$(grep "^filesystems=" <<<"$permissions" | cut -d= -f2-)
 for grant in ${filesystems//;/ }; do
   case "$grant" in
     xdg-download|xdg-run/pipewire-0) ;;
-    xdg-config/*:ro|~/.mozilla/*:ro|~/.librewolf:ro|~/.zen:ro|~/.var/app/*:ro|~/snap/*:ro) ;;
+    xdg-config/*:ro|"~/.mozilla/"*:ro|"~/.librewolf:ro"|"~/.zen:ro"|"~/.var/app/"*:ro|"~/snap/"*:ro) ;;
     *) fail "the Flatpak reaches $grant, beyond downloads, PipeWire and other browsers'"'"' data read-only" ;;
   esac
 done
@@ -100,11 +101,12 @@ done
 curl -fsS -X PUT "http://127.0.0.1:9333/json/new?data:text/html,ardia" >/dev/null || fail "DevTools did not open a page"
 sleep 3
 curl -fsS http://127.0.0.1:9333/json/list | grep -q "\"type\": \"page\"" || fail "no page target"
-renderers=$(pgrep -fa -- "--type=renderer" || true)
-[ -n "$renderers" ] || { tail -40 /tmp/run.log; fail "no renderer process"; }
-! pgrep -fa -- "--no-sandbox" >/dev/null || fail "a process runs with --no-sandbox: $(pgrep -fa -- --no-sandbox | head -3)"
-grep -q "zypak" <<<"$(pgrep -fa zypak || true)" || fail "Chromium did not start through zypak"
-echo "ok   starts headless through zypak with Chromium'"'"'s sandbox ($(wc -l <<<"$renderers") renderers, a page over DevTools)"
+processes=$(ps -eo args)
+renderers=$(grep -c "^/app/lib/ardia/chrome --type=renderer" <<<"$processes" || true)
+[ "$renderers" -gt 0 ] || { tail -40 /tmp/run.log; fail "no renderer process"; }
+! grep "^/app/lib/ardia/chrome" <<<"$processes" | grep -q -- "--no-sandbox" || fail "a Chromium process runs with --no-sandbox"
+grep -q "/app/bin/zypak-helper child .*/app/lib/ardia/chrome --type=zygote" <<<"$processes" || { grep -E "zypak|ardia/chrome" <<<"$processes" | cut -c1-200; fail "Chromium'"'"'s zygote does not run in zypak'"'"'s sandbox"; }
+echo "ok   starts headless with the zygote in zypak'"'"'s sandbox, $renderers renderers, none with --no-sandbox, a page over DevTools"
 flatpak kill "$app" 2>/dev/null || true
 for _ in $(seq 1 20); do flatpak ps --columns=application | grep -q "$app" || break; sleep 1; done
 test -d "$HOME/.var/app/$app" || fail "no data folder under ~/.var/app/$app after a run"
