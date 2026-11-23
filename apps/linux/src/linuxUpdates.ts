@@ -23,7 +23,7 @@ export function linuxUpdaterFor(host: ArdiaHost): LinuxUpdater {
   if (known) return known;
   const windowId = host.bootstrap.windowId;
   const browserWindow = !isLinuxUtility(windowId);
-  const open = (url: string) => (browserWindow ? openUrls([url], windowId) : openUrlFromSettings(url));
+  const open = (url: string) => (browserWindow ? (openUrls([url], windowId), true) : openUrlFromSettings(url));
   const toast: typeof showToast = (...args) => {
     if (browserWindow) showToast(...args);
   };
@@ -92,7 +92,7 @@ export function linuxUpdaterFor(host: ArdiaHost): LinuxUpdater {
       }).catch(() => null);
       if (!answer?.confirmed) return;
       if (command) copyText(command);
-      else (noteUpdatePageOpened(consent), open(release.url));
+      else if (open(release.url)) noteUpdatePageOpened(consent);
     },
     open,
     showsToasts: browserWindow,
