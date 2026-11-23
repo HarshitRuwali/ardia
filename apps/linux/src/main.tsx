@@ -8,6 +8,7 @@ import { emitAppEvent, emitCommand, menuShown, setWindowCloseDecider } from "@ar
 import { WindowRoot } from "../../browser/src/App";
 import { startNativeSync } from "../../browser/src/state/app/nativeSync";
 import { startTabPages } from "../../browser/src/state/tabs/tabPages";
+import { startReader } from "../../browser/src/state/reader/reader";
 import { startTabLifecycle, useLifecycle } from "../../browser/src/state/tabs/tabLifecycle";
 import { useMedia } from "../../browser/src/state/media/media";
 import { useToolbarAutoHide } from "../../browser/src/state/windows/toolbarAutoHide";
@@ -16,7 +17,6 @@ import { peekShown } from "../../browser/src/state/windows/dockMotion";
 import { onPageCovered } from "./shims/web/HostWebView";
 import { toolbarMoving } from "./AutoHideToolbarRegion";
 import { copyLinkToSelection, jumpToSelection, replaceInField, usePageSelection } from "../../browser/src/state/site/selection";
-import { startUnsafeHidingRuleSweep } from "../../browser/src/state/site/hiddenElements";
 import { webviews } from "../../browser/src/platform/webviews";
 import { startMemoryTrim } from "../../browser/src/state/tabs/memoryTrim";
 import { startProfileUnloading } from "../../browser/src/state/profiles/profileUnloading";
@@ -129,7 +129,6 @@ async function start() {
   watchWindowDecorations(ardiaHost, windowId);
   const capabilities = linuxCapabilities(ardiaHost);
   if (capabilities.cliControl) startProgramControl();
-  if (capabilities.hiddenElements && !utility) startUnsafeHidingRuleSweep();
   await startLinuxShortcuts(ardiaHost);
   if (utility) {
     const persistence = startHostPersistence(ardiaHost, useBrowser, stored ?? {}, createUtilitySessionSnapshot(useBrowser.getState(), saved ?? {}));
@@ -160,6 +159,7 @@ async function start() {
     if (!saved) await recordFreshProfile();
     await persistence.flush();
     startTabPages();
+    startReader();
     startNativeSync();
     listenForOpenUrls(ardiaHost);
     startHostDownloads(ardiaHost, useBrowser);
