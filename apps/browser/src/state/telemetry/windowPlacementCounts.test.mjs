@@ -49,6 +49,29 @@ test("an hour with only drags Ardia moved itself still sends usage_counts with h
   assert.equal((await sentDragLoops()).length, before + 1, "an hour with no drag sends nothing more");
 });
 
+test("drags macOS moved and drags Ardia took over after asking macOS are counted apart from Ardia's own moves", async () => {
+  client.loadChoice();
+  client.setSharing(true, "onboarding");
+  const sentDrags = async () => {
+    await client.saveQueueNow();
+    const saved = JSON.parse(stub.docs.get("telemetry-queue.json") ?? '{"events":[]}');
+    return saved.events
+      .filter((e) => e.event === "usage_counts")
+      .map((e) => [e.properties.window_drags_native, e.properties.window_drag_takeovers, e.properties.window_drag_loops]);
+  };
+
+  stub.emitAppEvent({ type: "windowDragNative", epoch: client.consentEpoch() });
+  stub.emitAppEvent({ type: "windowDragNative", epoch: client.consentEpoch() });
+  stub.emitAppEvent({ type: "windowDragTakeover", epoch: client.consentEpoch() });
+  stub.emitAppEvent({ type: "windowDragLoop", epoch: client.consentEpoch() });
+  usage.sessionEnding();
+  assert.deepEqual((await sentDrags()).at(-1), [2, 1, 1]);
+
+  stub.emitAppEvent({ type: "windowDragNative", epoch: client.consentEpoch() });
+  usage.sessionEnding();
+  assert.deepEqual((await sentDrags()).at(-1), [1, 0, 0]);
+});
+
 test("an hour with only a window reopened maximized still sends usage_counts", async () => {
   client.loadChoice();
   client.setSharing(true, "onboarding");
@@ -109,7 +132,7 @@ test("Little Ardia and utility windows opened floating are counted apart, sent w
   placement.noteWindowOpenedFloating(true, consent());
   client.setSharing(true, "settings");
   placement.noteWindowOpenedFloating(true, before);
-  assert.deepEqual(placement.takeWindowPlacementCounts(), { window_centered_resizes: 0, windows_reopened_maximized: 0, window_titles_read: 0, window_drag_loops: 0, window_close_pins_kept: 0, window_close_pin_ids_renewed: 0, little_ardia_opened_floating: 0, utility_windows_opened_floating: 0, linux_windows_app_decorated: 0, linux_windows_compositor_decorated: 0, linux_decoration_answers_none: 0, linux_decoration_answers_client: 0, linux_decoration_answers_server: 0, linux_page_viewports_rejected: 0 });
+  assert.deepEqual(placement.takeWindowPlacementCounts(), { window_centered_resizes: 0, windows_reopened_maximized: 0, window_titles_read: 0, window_drag_loops: 0, window_drags_native: 0, window_drag_takeovers: 0, window_close_pins_kept: 0, window_close_pin_ids_renewed: 0, little_ardia_opened_floating: 0, utility_windows_opened_floating: 0, linux_windows_app_decorated: 0, linux_windows_compositor_decorated: 0, linux_decoration_answers_none: 0, linux_decoration_answers_client: 0, linux_decoration_answers_server: 0, linux_page_viewports_rejected: 0 });
 });
 
 test("floating windows counted in one consent period are dropped when the period changes, not reported in the next", async () => {
