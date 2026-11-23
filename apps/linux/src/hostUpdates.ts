@@ -36,6 +36,7 @@ export const UPDATE_PREFERENCES_LOCK = "ardia.linux.update-preferences";
 export const AUR_UPDATE_COMMAND = "yay -Syu ardia-bin";
 export const FLATPAK_ID = "dev.ardia.Ardia";
 export const FLATPAK_UPDATE_COMMAND = `flatpak update ${FLATPAK_ID}`;
+export const managedUpdateCommand = (manager: PackageManager): string | null => (manager === "flatpak" ? FLATPAK_UPDATE_COMMAND : null);
 
 export type InstallKind = UpdateInstallKind | "managed" | "unsupported";
 export type PackageManager = "flatpak" | "package";

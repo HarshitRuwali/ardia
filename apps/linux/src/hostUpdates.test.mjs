@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { CHECK_EVERY_MS, FIRST_CHECK_AFTER_MS, UPDATE_CHECK_LOCK, UPDATE_PREFERENCES, WATCH_EVERY_MS, installsUpdates, linuxSwitchesFetch, linuxUpdater, packageManager, scheduleUpdateChecks } from "./hostUpdates.ts";
+import { CHECK_EVERY_MS, FIRST_CHECK_AFTER_MS, UPDATE_CHECK_LOCK, UPDATE_PREFERENCES, WATCH_EVERY_MS, installsUpdates, linuxSwitchesFetch, linuxUpdater, managedUpdateCommand, packageManager, scheduleUpdateChecks } from "./hostUpdates.ts";
 import { SELF_UPDATE_METHODS } from "./hostCapabilities.ts";
 import { compareVersions, linuxReleases, newestRelease } from "./updateReleases.ts";
 import { takeUpdateCounts } from "../../browser/src/state/telemetry/updateCounts.ts";
@@ -449,6 +449,11 @@ test("a Flatpak is told apart by its data folder, so the offer names Flatpak, an
   assert.equal(counts.update_offers_managed_flatpak, 2);
   assert.equal(counts.update_offers_managed_package, 1);
   assert.equal(packageManager({ bootstrap: { launchConfig: { configDirectory: "/srv/.var/app/dev.ardia.Ardia.Devel/config" } } }), "package");
+});
+
+test("only a Flatpak gets a command to copy: a package could be an .rpm or the AUR package, so it gets the release page", () => {
+  assert.equal(managedUpdateCommand("flatpak"), "flatpak update dev.ardia.Ardia");
+  assert.equal(managedUpdateCommand("package"), null);
 });
 
 test("an install that can't update itself, and an engine without self-update, keep the release page", async () => {

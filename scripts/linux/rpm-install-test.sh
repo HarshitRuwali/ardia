@@ -16,7 +16,8 @@ stays), and removing it leaves the file system as it was before the install
   --older RPM   the build to upgrade from; by default one is made from this
                 .rpm with the version before it (X becomes X-nightly.1,
                 X-nightly.N becomes X-nightly.N-1) and a file only it carries,
-                with linux_formats.py rpm in a fedora container
+                with linux_formats.py rpm in a fedora container; only that
+                made build is checked for its file before and after
 
 The images default to fedora:43 and opensuse/tumbleweed; tumbleweed also gets
 apparmor-parser and apparmor-abstractions first, so its run
@@ -56,7 +57,9 @@ work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
 chmod 0755 "$work"
 
+generated_older=0
 if [ -z "$older" ]; then
+  generated_older=1
   builder=fedora:43
   pull "$builder" || { echo "FAIL could not pull $builder to make the older build"; exit 1; }
   echo "== making the older build in $builder"
@@ -109,11 +112,11 @@ echo "ok   dependencies resolve ($family)"
 snapshot >/tmp/before
 install /pkg/older.rpm >/tmp/older.log 2>&1 || { cat /tmp/older.log; fail "the older build does not install"; }
 older=$(rpm -q --qf "%{VERSION}" ardia)
-test -f /usr/lib/ardia/older-build-only || fail "the older build lacks its own file"
+[ "$GENERATED_OLDER" = 0 ] || test -f /usr/lib/ardia/older-build-only || fail "the older build lacks its own file"
 install /pkg/new.rpm >/tmp/install.log 2>&1 || { cat /tmp/install.log; fail "the upgrade from $older does not install"; }
 expected=$(rpm -qp --qf "%{NAME}-%{VERSION}-%{RELEASE}.%{ARCH}" /pkg/new.rpm 2>/dev/null)
 [ "$(rpm -q ardia)" = "$expected" ] || fail "rpm -q ardia says $(rpm -q ardia | tr "\n" " "), not $expected"
-test ! -e /usr/lib/ardia/older-build-only || fail "the upgrade left the older build'"'"'s own file"
+[ "$GENERATED_OLDER" = 0 ] || test ! -e /usr/lib/ardia/older-build-only || fail "the upgrade left the older build'"'"'s own file"
 echo "ok   $older upgrades to $expected"
 rpm --verify ardia >/tmp/verify.log 2>&1 || { cat /tmp/verify.log; fail "rpm --verify ardia"; }
 echo "ok   rpm --verify"
@@ -157,7 +160,7 @@ for image in "${images[@]}"; do
     status=1
     continue
   fi
-  if ! "$engine" run --rm -v "$rpm_file:/pkg/new.rpm:ro" -v "$older:/pkg/older.rpm:ro" "$image" bash -c "$check"; then
+  if ! "$engine" run --rm -e GENERATED_OLDER="$generated_older" -v "$rpm_file:/pkg/new.rpm:ro" -v "$older:/pkg/older.rpm:ro" "$image" bash -c "$check"; then
     echo "FAIL $image"
     status=1
   fi

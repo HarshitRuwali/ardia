@@ -1,5 +1,5 @@
 import type { ArdiaHost } from "./host";
-import { AUR_UPDATE_COMMAND, FLATPAK_UPDATE_COMMAND, linuxUpdater, scheduleUpdateChecks, updatesAvailable, linuxSwitchesFetch, killSwitchesAvailable, type LinuxUpdater, type UpdateLocks } from "./hostUpdates.ts";
+import { AUR_UPDATE_COMMAND, FLATPAK_UPDATE_COMMAND, linuxUpdater, managedUpdateCommand, scheduleUpdateChecks, updatesAvailable, linuxSwitchesFetch, killSwitchesAvailable, type LinuxUpdater, type UpdateLocks } from "./hostUpdates.ts";
 import { isLinuxUtility } from "./session.ts";
 import { refreshDocument } from "./shims/shellBase";
 import { systemInfo } from "../../browser/src/platform/app";
@@ -69,7 +69,7 @@ export function linuxUpdaterFor(host: ArdiaHost): LinuxUpdater {
       }),
     managed: async (release, current, asked, manager) => {
       const flatpak = manager === "flatpak";
-      const command = flatpak ? FLATPAK_UPDATE_COMMAND : AUR_UPDATE_COMMAND;
+      const command = managedUpdateCommand(manager);
       if (!asked) {
         toast(
           windowId,
@@ -84,11 +84,13 @@ export function linuxUpdaterFor(host: ArdiaHost): LinuxUpdater {
         message: flatpak
           ? `You have Ardia ${current}. Flatpak installed Ardia, so update it there: run ${FLATPAK_UPDATE_COMMAND}, or if you installed the .flatpak file, install the new one from its release page.`
           : `You have Ardia ${current}. Your package manager installed Ardia, so update it there: for the AUR package, run ${AUR_UPDATE_COMMAND} or use your AUR helper; for the .rpm, install the new one from its release page with dnf or zypper.`,
-        confirmTitle: "Copy Command",
-        cancelTitle: "OK",
+        confirmTitle: command ? "Copy Command" : "Open Release Page",
+        cancelTitle: command ? "OK" : "Later",
         windowId,
       }).catch(() => null);
-      if (answer?.confirmed) copyText(command);
+      if (!answer?.confirmed) return;
+      if (command) copyText(command);
+      else (noteUpdatePageOpened(), open(release.url));
     },
     open,
     showsToasts: browserWindow,
