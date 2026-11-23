@@ -8,6 +8,7 @@ import { confirm } from "../../browser/src/platform/dialogs";
 import { readDocument, saveDocument } from "../../browser/src/platform/documents";
 import { startKillSwitches } from "../../browser/src/platform/killSwitchesLaunch";
 import { showToast } from "../../browser/src/state/app/toasts";
+import { consentToken } from "../../browser/src/state/telemetry/consentPeriod";
 import { openUrls } from "../../browser/src/state/browser/actions";
 import { openUrlFromSettings } from "../../browser/src/state/settings/settingsWindows";
 import { noteSwitchRefresh, noteUpdatePageOpened } from "../../browser/src/state/telemetry/updateCounts.ts";
@@ -79,6 +80,7 @@ export function linuxUpdaterFor(host: ArdiaHost): LinuxUpdater {
         );
         return;
       }
+      const consent = consentToken();
       const answer = await confirm({
         title: `Ardia ${release.version} is available`,
         message: flatpak
@@ -90,7 +92,7 @@ export function linuxUpdaterFor(host: ArdiaHost): LinuxUpdater {
       }).catch(() => null);
       if (!answer?.confirmed) return;
       if (command) copyText(command);
-      else (noteUpdatePageOpened(), open(release.url));
+      else (noteUpdatePageOpened(consent), open(release.url));
     },
     open,
     showsToasts: browserWindow,
