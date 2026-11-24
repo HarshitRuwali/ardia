@@ -5,7 +5,7 @@ on:
     paths: &inputs
       - ".gitattributes"
       - "apps/browser/**"
-      - "apps/linux/**"
+      - "apps/desktop/**"
       - "apps/site/**"
       - "apps/phone/scripts/**"
       - "apps/ios/**"
@@ -17,6 +17,7 @@ on:
       - "tests/**"
       - "docs/plugin.schema.json"
       - "docs/plugins.md"
+      - "docs/privacy.md"
       - "docs/engine-build.md"
       - "docs/release-notes/**"
       - "infra/site/**"
@@ -29,6 +30,12 @@ on:
       - "tsconfig.base.json"
       - ".nvmrc"
       - "patches/**"
+      - "docs/dia-feature-parity.md"
+      - "**/*.test.*"
+      - "**/*-test.mjs"
+      - "**/*Tests.swift"
+      - "**/test_*.py"
+      - "**/*Test.kt"
   push:
     branches: [main]
     paths: *inputs
@@ -68,7 +75,7 @@ jobs:
             code:
               - ".gitattributes"
               - "apps/browser/**"
-              - "apps/linux/**"
+              - "apps/desktop/**"
               - "apps/phone/scripts/**"
               - "apps/site/src/assets/**"
               - "apps/site/src/scripts/meadowApp.ts"
@@ -77,7 +84,8 @@ jobs:
               - "apps/site/src/data/heroFrames.mjs"
               - "packages/**"
               - "engine/ardiacore/src/**"
-              - "engine/ardiacore-linux/src/ardia/linux/ac_linux_contract.h"
+              - "engine/ardiacore-linux/src/**"
+              - "engine/ardiacore-desktop/src/**"
               - "engine/patches/**"
               - "docs/engine-build.md"
               - "scripts/lib/**"
@@ -93,19 +101,23 @@ jobs:
               - ".github/workflows/checks.yml"
             browser:
               - "apps/browser/**"
-              - "apps/linux/src/**"
-              - "apps/linux/package.json"
+              - "apps/desktop/src/**"
+              - "apps/desktop/package.json"
               - "apps/site/public/switches.json"
               - "packages/**"
               - "engine/ardiacore/src/**"
               - "engine/chromium/src/**"
+              - "engine/ardiacore-desktop/src/**"
+              - "engine/ardiacore-linux/src/**"
               - "engine/ardiacore-linux/content-blocker/**"
+              - "engine/patches/**"
               - "scripts/lib/**"
               - "scripts/security/**"
               - "scripts/windows/**"
               - "tests/**"
               - "docs/plugin.schema.json"
               - "docs/plugins.md"
+              - "docs/privacy.md"
               - ".github/workflows/windows.yml"
               - "package.json"
               - "pnpm-lock.yaml"
@@ -121,11 +133,17 @@ jobs:
               - "apps/ios/**"
               - "apps/site/**"
               - "apps/cli/**"
-              - "apps/linux/scripts/**"
+              - "apps/desktop/scripts/**"
               - "apps/browser/official-plugins.json"
               - "apps/browser/official-plugins-history.json"
+              - "apps/browser/macos/Ardia.xcodeproj/project.pbxproj"
+              - "apps/browser/macos/Ardia-macOS/Info.plist"
               - "packages/ardiacore/ios/ArdiaLaunchConfig.mm"
               - "packages/sync/ios/Core/LegacyMigration.swift"
+              - "packages/shell/ios/PluginCore/PluginSandbox.swift"
+              - "packages/shell/ios/PluginProcess.swift"
+              - "packages/shell/plugin-tests/**"
+              - "packages/import/ios/Core/ZipArchive.swift"
               - "packages/ardiacore/ios/page_script.js"
               - "packages/ardiacore/prebuilt-engines.tsv"
               - "packages/ardiacore/prebuilt-engines-linux.tsv"
@@ -142,6 +160,12 @@ jobs:
               - ".github/**"
               - "package.json"
               - ".nvmrc"
+              - "docs/dia-feature-parity.md"
+              - "**/*.test.*"
+              - "**/*-test.mjs"
+              - "**/*Tests.swift"
+              - "**/test_*.py"
+              - "**/*Test.kt"
       - id: router
         name: The router, from main
         if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
@@ -300,4 +324,4 @@ jobs:
         run: node --run test:root
       - name: Vouch and stale tests
         if: ${{ !cancelled() }}
-        run: node --test .github/vouch/vouch.test.cjs .github/stale/stale.test.cjs
+        run: node --test .github/vouch/vouch.test.cjs .github/stale/stale.test.cjs .github/cla/cla.test.cjs
