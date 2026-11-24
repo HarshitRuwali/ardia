@@ -23,6 +23,7 @@
 #include "ardia/win/test_gate.h"
 #include "ardia/win/webui/webui_mode.h"
 #include "ardia/win/webui/webui_shell.h"
+#include "ardia/win/webui/webui_window_policy.h"
 #include "base/base_paths.h"
 #include "base/base_paths_win.h"
 #include "base/base_switches.h"
@@ -618,10 +619,29 @@ void AddWebUIMainParts(ChromeBrowserMainParts* main_parts) {
   main_parts->AddParts(std::make_unique<WebUIMainParts>());
 }
 
+base::ListValue WebUIRelaunchUrls(const base::CommandLine& command_line,
+                             const base::FilePath& cur_dir) {
+  base::ListValue urls;
+  for (const base::CommandLine::StringType& argument :
+       command_line.GetArgs()) {
+    GURL url(base::WideToUTF8(argument));
+    if (!url.is_valid()) {
+      url = url_formatter::FixupRelativeFile(cur_dir,
+                                             base::FilePath(argument));
+    }
+    if (url.is_valid() &&
+        webui_window::RelaunchUrlAccepted(url.scheme(), url.spec().size(),
+                                          urls.size())) {
+      urls.Append(url.spec());
+    }
+  }
+  return urls;
+}
+
 bool WebUIRelaunched(const base::CommandLine& command_line,
                      const base::FilePath& cur_dir) {
   ClearExiting();
-  OpenWebUIShell();
+  OpenWebUIShellWithUrls(WebUIRelaunchUrls(command_line, cur_dir));
   return true;
 }
 
@@ -728,6 +748,7 @@ void BeforeWebUIChromeMain(base::CommandLine* command_line) {
   }
   g_ardia_win_add_main_parts = &AddWebUIMainParts;
   g_ardia_win_relaunched = &WebUIRelaunched;
+  InstallWebUIShellHooks();
 }
 
 bool KeepsWindowWithoutTabs(const BrowserWindowInterface* browser) {
