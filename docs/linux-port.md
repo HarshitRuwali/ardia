@@ -761,8 +761,10 @@ command ([linux-ci.md](linux-ci.md) › Linux releases).
     folder Import reads (Chromium-family profiles under `xdg-config`, Firefox, LibreWolf and Zen, and their Flatpak
     and Snap folders). A test reads the import table out of `ac_linux_import_readers.cc` and fails if a folder is
     missing from the grants.
-  - **Updates.** `ardia-update kind` says `managed` inside a Flatpak, so Ardia only tells you about a release, naming
-    `flatpak update dev.ardia.Ardia` (it knows it is a Flatpak by its data folder under `~/.var/app/dev.ardia.Ardia/`).
+  - **Updates.** `ardia-update kind` says `managed` inside a Flatpak, so Ardia only tells you about a release and
+    offers its page, saying to install the new `.flatpak` (it knows it is a Flatpak by its data folder under
+    `~/.var/app/dev.ardia.Ardia/`). It names no `flatpak update` command: the bundle has no remote, so that command
+    finds nothing.
   - **Known limits.** Native messaging hosts (password managers' browser bridges) run outside the sandbox, so
     Flatpak Ardia can't start them (#3642). Setting Ardia as the default browser from Settings needs `xdg-settings`,
     which the runtime lacks: set it in the desktop's settings (#3643). The bundle has no remote, so `flatpak update`
@@ -961,8 +963,10 @@ caller: sync keys, sealing and opening files and passwords, and the recovery phr
   ready, and Check Now and the app menu read Restart to Update. Where it can't (an engine without the methods, or
   `unsupported`), Check Now asks before opening the release page and an automatic check offers it once as a toast, and
   the toggle is hidden. An install a package manager owns (`managed`: the AUR's `ardia-bin`, the `.rpm`, the Flatpak)
-  is told to update with it: a Flatpak names `flatpak update dev.ardia.Ardia`, the others the AUR command and the
-  `.rpm` from the release page, and the toast's View opens that page. A failed download or install falls back to the release page once and isn't retried automatically.
+  is told to update there and offered the release page (Open Release Page, or the toast's View): a Flatpak to
+  install the new `.flatpak`, the others the AUR command or the new `.rpm`. No command is copied: the `.rpm` and the
+  Flatpak bundle have no repository or remote to update from, and `ardia-update kind` says only `managed`, so the
+  dialog can't tell an AUR install apart (#4078). A failed download or install falls back to the release page once and isn't retried automatically.
 - **Self-update.** `ac_linux_self_update.cc` serves `ArdiaUpdates.installKind`, `update(version)`, `status()`,
   `claimOutcome(run)` and `restart`; the rules are in `ac_linux_self_update_policy.h`. The engine owns each run, so it
   carries on whatever window started it or closes.

@@ -1,9 +1,8 @@
 import type { ArdiaHost } from "../../host";
-import { AUR_UPDATE_COMMAND, FLATPAK_UPDATE_COMMAND, linuxUpdater, managedUpdateCommand, scheduleUpdateChecks, updatesAvailable, type LinuxUpdater, type UpdateLocks } from "./hostUpdates.ts";
+import { AUR_UPDATE_COMMAND, linuxUpdater, scheduleUpdateChecks, updatesAvailable, type LinuxUpdater, type UpdateLocks } from "./hostUpdates.ts";
 import { isLinuxUtility } from "../../session.ts";
 import { refreshDocument } from "../../shims/shellBase";
 import { systemInfo } from "../../../../browser/src/platform/app";
-import { copyText } from "../../../../browser/src/platform/clipboard";
 import { confirm } from "../../../../browser/src/platform/dialogs";
 import { readDocument, saveDocument } from "../../../../browser/src/platform/documents";
 import { showToast } from "../../../../browser/src/state/app/toasts";
@@ -69,13 +68,12 @@ export function linuxUpdaterFor(host: ArdiaHost): LinuxUpdater {
       }),
     managed: async (release, current, asked, manager) => {
       const flatpak = manager === "flatpak";
-      const command = managedUpdateCommand(manager);
       if (!asked) {
         toast(
           windowId,
           `Ardia ${release.version} is available`,
-          flatpak ? `Update it with ${FLATPAK_UPDATE_COMMAND}, or install the new .flatpak from its release page.` : `Update it with your package manager, like ${AUR_UPDATE_COMMAND}, or install the new .rpm from its release page.`,
-          { icon: UPDATE_ICON, sticky: true, action: { title: "View", run: () => (noteUpdatePageOpened(), open(release.url)) } },
+          flatpak ? "Install the new .flatpak from its release page." : `Update it with your package manager, like ${AUR_UPDATE_COMMAND}, or install the new .rpm from its release page.`,
+          { icon: UPDATE_ICON, sticky: true, action: { title: "View", run: () => void (open(release.url) && noteUpdatePageOpened()) } },
         );
         return;
       }
@@ -83,15 +81,13 @@ export function linuxUpdaterFor(host: ArdiaHost): LinuxUpdater {
       const answer = await confirm({
         title: `Ardia ${release.version} is available`,
         message: flatpak
-          ? `You have Ardia ${current}. Flatpak installed Ardia, so update it there: run ${FLATPAK_UPDATE_COMMAND}, or if you installed the .flatpak file, install the new one from its release page.`
+          ? `You have Ardia ${current}. This Flatpak was installed from a .flatpak file, which flatpak update can't update: install the new .flatpak from its release page.`
           : `You have Ardia ${current}. Your package manager installed Ardia, so update it there: for the AUR package, run ${AUR_UPDATE_COMMAND} or use your AUR helper; for the .rpm, install the new one from its release page with dnf or zypper.`,
-        confirmTitle: command ? "Copy Command" : "Open Release Page",
-        cancelTitle: command ? "OK" : "Later",
+        confirmTitle: "Open Release Page",
+        cancelTitle: "Later",
         windowId,
       }).catch(() => null);
-      if (!answer?.confirmed) return;
-      if (command) copyText(command);
-      else if (open(release.url)) noteUpdatePageOpened(consent);
+      if (answer?.confirmed && open(release.url)) noteUpdatePageOpened(consent);
     },
     open,
     showsToasts: browserWindow,
