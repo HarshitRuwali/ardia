@@ -26,7 +26,7 @@ const SELF_UPDATE_FIELDS = [
 
 const noSelfUpdates = () => Object.fromEntries(SELF_UPDATE_FIELDS.map((field) => [field, 0])) as Record<string, number>;
 
-let checks = { asked: 0, automatic: 0, failed: 0, found: 0, pageOpens: 0, noticesDismissed: 0, managedPacman: 0, managedRpm: 0, managedFlatpak: 0, managedPackage: 0, commandCopies: 0, switchRefreshes: 0, switchRefreshFailures: 0, unsandboxed: 0, passwordGranted: 0, passwordDenied: 0, passwordCancelled: 0 };
+let checks = { asked: 0, automatic: 0, failed: 0, found: 0, pageOpens: 0, noticesDismissed: 0, managedPacman: 0, managedRpm: 0, managedFlatpak: 0, managedPackage: 0, switchRefreshes: 0, switchRefreshFailures: 0, unsandboxed: 0, passwordGranted: 0, passwordDenied: 0, passwordCancelled: 0 };
 let selfUpdates = noSelfUpdates();
 
 const countSelfUpdate = (field: string, consent: ConsentToken | null | undefined) => countFor(consentOrNow(consent), () => void (selfUpdates[field] = (selfUpdates[field] ?? 0) + 1));
@@ -45,7 +45,6 @@ export const noteUpdatePageOpened = (consent?: ConsentToken | null) => countFor(
 export const noteUpdateNoticeDismissed = (consent?: ConsentToken | null) => countFor(consentOrNow(consent), () => void (checks.noticesDismissed += 1));
 const MANAGED_OFFERS = { pacman: "managedPacman", rpm: "managedRpm", flatpak: "managedFlatpak", package: "managedPackage" } as const;
 export const noteManagedUpdateOffer = (manager: keyof typeof MANAGED_OFFERS, consent?: ConsentToken | null) => countFor(consentOrNow(consent), () => void (checks[MANAGED_OFFERS[manager]] += 1));
-export const noteUpdateCommandCopied = (consent?: ConsentToken | null) => countFor(consentOrNow(consent), () => void (checks.commandCopies += 1));
 
 const updateDownloadFailure = (reason: unknown): UpdateDownloadFailure => (UPDATE_DOWNLOAD_FAILURES as readonly unknown[]).includes(reason) ? (reason as UpdateDownloadFailure) : "other";
 const updateInstallFailure = (reason: unknown): UpdateInstallFailure => (UPDATE_INSTALL_FAILURES as readonly unknown[]).includes(reason) ? (reason as UpdateInstallFailure) : "other";
@@ -92,7 +91,6 @@ export function takeUpdateCounts() {
     update_offers_managed_rpm: checks.managedRpm,
     update_offers_managed_flatpak: checks.managedFlatpak,
     update_offers_managed_package: checks.managedPackage,
-    update_commands_copied: checks.commandCopies,
     kill_switch_refreshes: checks.switchRefreshes,
     kill_switch_refresh_failures: checks.switchRefreshFailures,
     launches_without_sandbox: checks.unsandboxed,
@@ -101,7 +99,7 @@ export function takeUpdateCounts() {
     login_password_checks_cancelled: checks.passwordCancelled,
     ...selfUpdates,
   };
-  checks = { asked: 0, automatic: 0, failed: 0, found: 0, pageOpens: 0, noticesDismissed: 0, managedPacman: 0, managedRpm: 0, managedFlatpak: 0, managedPackage: 0, commandCopies: 0, switchRefreshes: 0, switchRefreshFailures: 0, unsandboxed: 0, passwordGranted: 0, passwordDenied: 0, passwordCancelled: 0 };
+  checks = { asked: 0, automatic: 0, failed: 0, found: 0, pageOpens: 0, noticesDismissed: 0, managedPacman: 0, managedRpm: 0, managedFlatpak: 0, managedPackage: 0, switchRefreshes: 0, switchRefreshFailures: 0, unsandboxed: 0, passwordGranted: 0, passwordDenied: 0, passwordCancelled: 0 };
   selfUpdates = noSelfUpdates();
   return taken;
 }

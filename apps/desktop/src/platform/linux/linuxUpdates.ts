@@ -1,22 +1,26 @@
 import { cleanUrl } from "@ardia/core";
 import type { ArdiaHost } from "../../host";
-import { AUR_UPDATE_COMMAND, linuxUpdater, readPackageManager, scheduleUpdateChecks, updatesAvailable, type LinuxUpdater, type PackageManager, type UpdateLocks } from "./hostUpdates.ts";
+import { linuxUpdater, readPackageManager, scheduleUpdateChecks, updatesAvailable, type LinuxUpdater, type PackageManager, type UpdateLocks } from "./hostUpdates.ts";
 import { isLinuxUtility } from "../../session.ts";
 import { refreshDocument } from "../../shims/shellBase";
 import { systemInfo } from "../../../../browser/src/platform/app";
-import { copyAddress, copyText } from "../../../../browser/src/platform/clipboard";
+import { copyAddress } from "../../../../browser/src/platform/clipboard";
 import { confirm } from "../../../../browser/src/platform/dialogs";
 import { readDocument, saveDocument } from "../../../../browser/src/platform/documents";
 import { showToast } from "../../../../browser/src/state/app/toasts";
 import { consentToken } from "../../../../browser/src/state/telemetry/consentPeriod";
 import { openUrls } from "../../../../browser/src/state/browser/actions";
 import { openUrlFromSettings } from "../../../../browser/src/state/settings/settingsWindows";
-import { noteUpdateCommandCopied, noteUpdateNoticeDismissed, noteUpdatePageOpened } from "../../../../browser/src/state/telemetry/updateCounts.ts";
+import { noteUpdateNoticeDismissed, noteUpdatePageOpened } from "../../../../browser/src/state/telemetry/updateCounts.ts";
 
 const updaters = new WeakMap<ArdiaHost, LinuxUpdater>();
 const UPDATE_ICON = "arrow.down.circle";
 
-const MANAGED_UPDATE: Record<Exclude<PackageManager, "pacman">, { toast: string; dialog: string }> = {
+const MANAGED_UPDATE: Record<PackageManager, { toast: string; dialog: string }> = {
+  pacman: {
+    toast: "Build the new ardia-bin package from its release page.",
+    dialog: "This Arch package was built from its source package, and ardia-bin isn't on the AUR yet: download the new ardia-bin source package from its release page and build it with makepkg -si.",
+  },
   rpm: {
     toast: "Install the new .rpm from its release page.",
     dialog: "This .rpm was installed from a downloaded file, so dnf and zypper have no repository to update it from: install the new .rpm from its release page.",
@@ -99,27 +103,6 @@ export function linuxUpdaterFor(host: ArdiaHost): LinuxUpdater {
       }),
     managed: async (release, current, asked, manager) => {
       const consent = consentToken();
-      if (manager === "pacman") {
-        const copyCommand = (taken?: ReturnType<typeof consentToken>) => (copyText(AUR_UPDATE_COMMAND), noteUpdateCommandCopied(taken));
-        if (!asked) {
-          toast(windowId, `Ardia ${release.version} is available`, `Update it with ${AUR_UPDATE_COMMAND} or your AUR helper.`, {
-            icon: UPDATE_ICON,
-            sticky: true,
-            action: { title: "Copy Command", run: () => copyCommand() },
-            secondary: { title: "Later", run: noteUpdateNoticeDismissed },
-          });
-          return;
-        }
-        const answer = await confirm({
-          title: `Ardia ${release.version} is available`,
-          message: `You have Ardia ${current}. The AUR package installed Ardia, so update it with ${AUR_UPDATE_COMMAND} or your AUR helper.`,
-          confirmTitle: "Copy Command",
-          cancelTitle: "Later",
-          windowId,
-        }).catch(() => null);
-        if (answer?.confirmed) copyCommand(consent);
-        return;
-      }
       const words = MANAGED_UPDATE[manager];
       if (!asked) {
         toast(windowId, `Ardia ${release.version} is available`, words.toast, {

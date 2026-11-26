@@ -618,14 +618,8 @@ a `.sha256` file beside it (`sha256sum -c <asset>.sha256` checks a download):
   with the new release's `.flatpak` (`flatpak update` takes over once Ardia is on Flathub); Ardia says when one is out.
   `flatpak uninstall --delete-data dev.ardia.Ardia` removes it and its data. What works differently in the sandbox is
   under Packaging and installing › Flatpak.
-- **Arch: `ardia-bin`.** Once the package is on the AUR, which follows stable releases:
-
-  ```bash
-  yay -S ardia-bin
-  ```
-
-  Without the AUR, or for a nightly, build it from the release's Arch source package. It holds the PKGBUILD and
-  `.SRCINFO` pinned to that release's tarball, which makepkg downloads and checks against its sha256:
+- **Arch: `ardia-bin`.** Build it from the release's Arch source package. It holds the PKGBUILD and `.SRCINFO`
+  pinned to that release's tarball, which makepkg downloads and checks against its sha256:
 
   ```bash
   tar xf ardia-bin-<version>.src.tar.gz
@@ -633,7 +627,9 @@ a `.sha256` file beside it (`sha256sum -c <asset>.sha256` checks a download):
   makepkg -si
   ```
 
-  `sudo pacman -R ardia-bin` removes it.
+  Updates are the same steps with the new release's source package; Ardia says when one is out.
+  `sudo pacman -R ardia-bin` removes it. `ardia-bin` isn't on the AUR yet: the release workflow's `aur` job publishes
+  stables there once it has the AUR key (`docs/linux-ci.md` › The AUR), and then `yay -S ardia-bin` installs it.
 - **Any distribution, no install: the AppImage.**
 
   ```bash
@@ -1038,10 +1034,12 @@ caller: sync keys, sealing and opening files and passwords, and the recovery phr
   kind` says only `managed`, so each package names its manager in `lib/ardia/ardia-ui/package-manager.js`
   (`export default "<manager>";`, served as `chrome://ardia/package-manager.js`), which the UI imports once per window,
   and only when the kind is `managed`: the `.rpm` build writes `rpm` (`linux_formats.py`), the Flatpak manifest
-  `flatpak` and the AUR PKGBUILD `pacman`, and the tarball, `.deb` and AppImage ship none. The AUR package gets Copy
-  Command, which copies `yay -Syu ardia-bin` (the dialog and the toast also name your AUR helper). The `.rpm` and the
-  Flatpak bundle have no repository or remote to update from, so they get the release page (Open Release Page, or the
-  toast's View) and are told to install the new `.rpm` or `.flatpak`. Without a marker, or with one the UI doesn't
+  `flatpak` and the Arch PKGBUILD `pacman`, and the tarball, `.deb` and AppImage ship none. Every managed install gets
+  the release page (Open Release Page, or the toast's View), with the step for its format: an Arch install builds the
+  new `ardia-bin` source package with `makepkg -si`, and the `.rpm` and the Flatpak bundle, which have no repository
+  or remote to update from, install the new `.rpm` or `.flatpak`. No AUR command is offered: `ardia-bin` isn't on the
+  AUR yet, so `yay -Syu ardia-bin` would find nothing. Once the release workflow's `aur` job publishes it, an Arch
+  install can be offered that command instead. Without a marker, or with one the UI doesn't
   know (another dpkg package, a distribution's own package), it says to update with your package manager or offers
   the release page. Neither the engine nor the helper's `kind` line changes for this, so today's engines keep
   working. When Check Now runs in Settings and no regular window is open to show the page, a dialog gives
@@ -1083,7 +1081,6 @@ caller: sync keys, sealing and opening files and passwords, and the recovery phr
   `update_release_page_opens`, `update_notices_dismissed`, `update_offers_managed_pacman`,
   `update_offers_managed_rpm`, `update_offers_managed_flatpak` and `update_offers_managed_package` (a release offered
   to an install a package manager updates, by the manager its marker names, `package` for none),
-  `update_commands_copied` (the AUR command copied from the dialog or the toast),
   `kill_switch_refreshes`, `kill_switch_refresh_failures`, and for self-update `update_downloads_started`,
   `update_downloads_finished`, `update_download_failures_<reason>`,
   `update_installs_<deb|tarball|appimage>`, `update_install_failures_<reason>` and `update_restarts`. Watch installs

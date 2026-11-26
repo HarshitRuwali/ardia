@@ -39,8 +39,6 @@ setConsentPeriod(true, "linux-updates-test");
 
 const RELEASE_PAGE = "https://github.com/ardia-browser/ardia/releases/tag/v0.2.46";
 const RELEASES = JSON.stringify([{ tag_name: "v0.2.46", html_url: RELEASE_PAGE, prerelease: false, draft: false, assets: [{ name: "Ardia-0.2.46-linux-x64.tar.xz" }] }]);
-const AUR_COMMAND = "yay -Syu ardia-bin";
-
 const managedHost = (windowId = "main") => ({
   bootstrap: { windowId, launchConfig: { configDirectory: "/home/u/.config/ardia/config" }, capabilities: ["ArdiaUpdates.releases", ...SELF_UPDATE_METHODS] },
   invoke: async (method) => {
@@ -57,6 +55,7 @@ const reset = (manager) => {
 };
 
 const RELEASE_PAGE_MANAGERS = [
+  ["an Arch", "pacman", /This Arch package was built from its source package, and ardia-bin isn't on the AUR yet: download the new ardia-bin source package from its release page and build it with makepkg -si\./, /^Build the new ardia-bin package from its release page\.$/],
   ["rpm", "rpm", /installed from a downloaded file, so dnf and zypper have no repository to update it from: install the new \.rpm from its release page/, /^Install the new \.rpm from its release page\.$/],
   ["flatpak", "flatpak", /installed from a \.flatpak file, which flatpak update can't update: install the new \.flatpak from its release page/, /^Install the new \.flatpak from its release page\.$/],
   ["an unmarked package", null, /Another package manager installed Ardia, so update it there, or download the new version from its release page/, /^Update it with your package manager, or download it from its release page\.$/],
@@ -73,7 +72,7 @@ for (const [label, manager, dialog, toast] of RELEASE_PAGE_MANAGERS) {
     assert.doesNotMatch(ui.confirms[0].message, /yay|flatpak update dev\.ardia\.Ardia/);
     assert.deepEqual([ui.opened, ui.copied], [[RELEASE_PAGE], []]);
     const counts = takeUpdateCounts();
-    assert.deepEqual([counts.update_release_page_opens, counts.update_commands_copied], [1, 0]);
+    assert.deepEqual([counts.update_release_page_opens, ui.toasts], [1, []]);
   });
 
   test(`the automatic offer on ${label} install says what to do, and its View opens the release page`, async () => {
@@ -87,37 +86,6 @@ for (const [label, manager, dialog, toast] of RELEASE_PAGE_MANAGERS) {
     assert.equal(takeUpdateCounts().update_release_page_opens, 1);
   });
 }
-
-test("Check for Updates on an AUR install offers its update command, copies it as text and opens nothing", async () => {
-  reset("pacman");
-  await linuxUpdaterFor(managedHost()).methods.checkForUpdates();
-  assert.equal(ui.confirms.length, 1);
-  assert.deepEqual([ui.confirms[0].confirmTitle, ui.confirms[0].cancelTitle], ["Copy Command", "Later"]);
-  assert.match(ui.confirms[0].message, /The AUR package installed Ardia, so update it with yay -Syu ardia-bin or your AUR helper\./);
-  assert.deepEqual([ui.opened, ui.copied], [[], [["text", AUR_COMMAND]]]);
-  const counts = takeUpdateCounts();
-  assert.deepEqual([counts.update_commands_copied, counts.update_release_page_opens, counts.update_offers_managed_pacman], [1, 0, 1]);
-});
-
-test("the automatic offer on an AUR install copies the command from the toast", async () => {
-  reset("pacman");
-  await linuxUpdaterFor(managedHost()).check(false);
-  assert.equal(ui.toasts.length, 1);
-  assert.equal(ui.toasts[0].message, "Update it with yay -Syu ardia-bin or your AUR helper.");
-  assert.deepEqual([ui.toasts[0].options.action.title, ui.toasts[0].options.secondary.title], ["Copy Command", "Later"]);
-  assert.equal(takeUpdateCounts().update_commands_copied, 0, "showing the toast copies nothing");
-  ui.toasts[0].options.action.run();
-  assert.deepEqual([ui.opened, ui.copied], [[], [["text", AUR_COMMAND]]]);
-  assert.equal(takeUpdateCounts().update_commands_copied, 1);
-});
-
-test("an AUR install's Later copies nothing and counts no copy", async () => {
-  reset("pacman");
-  await linuxUpdaterFor(managedHost()).check(false);
-  ui.toasts[0].options.secondary.run();
-  const counts = takeUpdateCounts();
-  assert.deepEqual([ui.copied, counts.update_commands_copied, counts.update_notices_dismissed], [[], 0, 1]);
-});
 
 test("the marker is read once per window", async () => {
   reset("rpm");
