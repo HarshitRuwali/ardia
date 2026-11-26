@@ -1,20 +1,37 @@
 import { cleanUrl } from "@ardia/core";
 import type { ArdiaHost } from "../../host";
-import { AUR_UPDATE_COMMAND, linuxUpdater, scheduleUpdateChecks, updatesAvailable, type LinuxUpdater, type UpdateLocks } from "./hostUpdates.ts";
+import { AUR_UPDATE_COMMAND, linuxUpdater, readPackageManager, scheduleUpdateChecks, updatesAvailable, type LinuxUpdater, type PackageManager, type UpdateLocks } from "./hostUpdates.ts";
 import { isLinuxUtility } from "../../session.ts";
 import { refreshDocument } from "../../shims/shellBase";
 import { systemInfo } from "../../../../browser/src/platform/app";
-import { copyAddress } from "../../../../browser/src/platform/clipboard";
+import { copyAddress, copyText } from "../../../../browser/src/platform/clipboard";
 import { confirm } from "../../../../browser/src/platform/dialogs";
 import { readDocument, saveDocument } from "../../../../browser/src/platform/documents";
 import { showToast } from "../../../../browser/src/state/app/toasts";
 import { consentToken } from "../../../../browser/src/state/telemetry/consentPeriod";
 import { openUrls } from "../../../../browser/src/state/browser/actions";
 import { openUrlFromSettings } from "../../../../browser/src/state/settings/settingsWindows";
-import { noteUpdateNoticeDismissed, noteUpdatePageOpened } from "../../../../browser/src/state/telemetry/updateCounts.ts";
+import { noteUpdateCommandCopied, noteUpdateNoticeDismissed, noteUpdatePageOpened } from "../../../../browser/src/state/telemetry/updateCounts.ts";
 
 const updaters = new WeakMap<ArdiaHost, LinuxUpdater>();
 const UPDATE_ICON = "arrow.down.circle";
+
+const MANAGED_UPDATE: Record<Exclude<PackageManager, "pacman">, { toast: string; dialog: string }> = {
+  rpm: {
+    toast: "Install the new .rpm from its release page.",
+    dialog: "This .rpm was installed from a downloaded file, so dnf and zypper have no repository to update it from: install the new .rpm from its release page.",
+  },
+  flatpak: {
+    toast: "Install the new .flatpak from its release page.",
+    dialog: "This Flatpak was installed from a .flatpak file, which flatpak update can't update: install the new .flatpak from its release page.",
+  },
+  package: {
+    toast: "Update it with your package manager, or download it from its release page.",
+    dialog: "Another package manager installed Ardia, so update it there, or download the new version from its release page.",
+  },
+};
+
+const loadPackageManager = () => import("chrome://ardia/package-manager.js").then((marker) => readPackageManager(marker.default));
 
 const browserLocks = (): UpdateLocks | undefined => (typeof navigator === "undefined" ? undefined : (navigator as { locks?: UpdateLocks }).locks);
 
@@ -32,6 +49,7 @@ export function linuxUpdaterFor(host: ArdiaHost): LinuxUpdater {
       windowId,
     }).then((answer) => void (answer.confirmed && copyAddress(cleanUrl(url))), () => {});
   const open = (url: string) => (browserWindow ? (openUrls([url], windowId), true) : openUrlFromSettings(url) || (offerLink(url), false));
+  let installedBy: Promise<PackageManager> | undefined;
   const toast: typeof showToast = (...args) => {
     if (browserWindow) showToast(...args);
   };
@@ -80,33 +98,48 @@ export function linuxUpdaterFor(host: ArdiaHost): LinuxUpdater {
         secondary: { title: "Later", run: noteUpdateNoticeDismissed },
       }),
     managed: async (release, current, asked, manager) => {
-      const flatpak = manager === "flatpak";
-      if (!asked) {
-        toast(
-          windowId,
-          `Ardia ${release.version} is available`,
-          flatpak ? "Install the new .flatpak from its release page." : `Update it with your package manager, like ${AUR_UPDATE_COMMAND}, or install the new .rpm from its release page.`,
-          {
+      const consent = consentToken();
+      if (manager === "pacman") {
+        const copyCommand = (taken?: ReturnType<typeof consentToken>) => (copyText(AUR_UPDATE_COMMAND), noteUpdateCommandCopied(taken));
+        if (!asked) {
+          toast(windowId, `Ardia ${release.version} is available`, `Update it with ${AUR_UPDATE_COMMAND} or your AUR helper.`, {
             icon: UPDATE_ICON,
             sticky: true,
-            action: { title: "View", run: () => void (open(release.url) && noteUpdatePageOpened()) },
+            action: { title: "Copy Command", run: () => copyCommand() },
             secondary: { title: "Later", run: noteUpdateNoticeDismissed },
-          },
-        );
+          });
+          return;
+        }
+        const answer = await confirm({
+          title: `Ardia ${release.version} is available`,
+          message: `You have Ardia ${current}. The AUR package installed Ardia, so update it with ${AUR_UPDATE_COMMAND} or your AUR helper.`,
+          confirmTitle: "Copy Command",
+          cancelTitle: "Later",
+          windowId,
+        }).catch(() => null);
+        if (answer?.confirmed) copyCommand(consent);
         return;
       }
-      const consent = consentToken();
+      const words = MANAGED_UPDATE[manager];
+      if (!asked) {
+        toast(windowId, `Ardia ${release.version} is available`, words.toast, {
+          icon: UPDATE_ICON,
+          sticky: true,
+          action: { title: "View", run: () => void (open(release.url) && noteUpdatePageOpened()) },
+          secondary: { title: "Later", run: noteUpdateNoticeDismissed },
+        });
+        return;
+      }
       const answer = await confirm({
         title: `Ardia ${release.version} is available`,
-        message: flatpak
-          ? `You have Ardia ${current}. This Flatpak was installed from a .flatpak file, which flatpak update can't update: install the new .flatpak from its release page.`
-          : `You have Ardia ${current}. Your package manager installed Ardia, so update it there: for the AUR package, run ${AUR_UPDATE_COMMAND} or use your AUR helper; for the .rpm, install the new one from its release page with dnf or zypper.`,
+        message: `You have Ardia ${current}. ${words.dialog}`,
         confirmTitle: "Open Release Page",
         cancelTitle: "Later",
         windowId,
       }).catch(() => null);
       if (answer?.confirmed && open(release.url)) noteUpdatePageOpened(consent);
     },
+    packageManager: () => (installedBy ??= loadPackageManager().catch((): PackageManager => "package")),
     open,
     showsToasts: browserWindow,
     locks: browserLocks(),

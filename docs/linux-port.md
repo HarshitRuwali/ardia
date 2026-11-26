@@ -799,6 +799,7 @@ command ([linux-ci.md](linux-ci.md) › Linux releases).
     binaries ship as built;
   - the policy leaves out the `dev.ardia.linux.update` action: rpm owns the files, so `ardia-update kind` says
     `managed` and Ardia never installs an update itself (Updates and kill switches);
+  - `lib/ardia/ardia-ui/package-manager.js` says `rpm`, so the update dialog sends you to the new `.rpm`;
   - `%post` installs and loads the AppArmor profile where `/etc/apparmor.d/abi/4.0` exists and refreshes the desktop
     and icon caches; `%postun` takes the profile away only on removal (`$1` is 0), not on an upgrade.
 
@@ -808,7 +809,7 @@ command ([linux-ci.md](linux-ci.md) › Linux releases).
   an older build made from this one (`--older`, by default the version before it with a file only it carries)
   upgrades to it and its own file goes, `rpm --verify` passes, `ldd` finds every library, `ardia --version` runs,
   `chrome-sandbox` is setuid root, the desktop entries validate, the policy has no update action, `ardia-update kind`
-  is `managed`, and removing it leaves the file system as it was (the desktop and icon caches the distribution
+  is `managed`, the UI is told rpm installed it, and removing it leaves the file system as it was (the desktop and icon caches the distribution
   regenerates aside).
 - **Flatpak.** `linux_formats.py from-tarball --tarball <tarball> --version <version> --flatpak <path>` writes the
   manifest (`flatpak_manifest`) and builds it with `flatpak-builder --user` and `flatpak build-bundle`, fetching the
@@ -832,8 +833,8 @@ command ([linux-ci.md](linux-ci.md) › Linux releases).
     and Snap folders). A test reads the import table out of `ac_linux_import_readers.cc` and fails if a folder is
     missing from the grants.
   - **Updates.** `ardia-update kind` says `managed` inside a Flatpak, so Ardia only tells you about a release and
-    offers its page, saying to install the new `.flatpak` (it knows it is a Flatpak by its data folder under
-    `~/.var/app/dev.ardia.Ardia/`). It names no `flatpak update` command: the bundle has no remote, so that command
+    offers its page, saying to install the new `.flatpak` (the manifest writes `flatpak` into
+    `ardia-ui/package-manager.js`, Updates and kill switches). It names no `flatpak update` command: the bundle has no remote, so that command
     finds nothing.
   - **Known limits.** Native messaging hosts (password managers' browser bridges) run outside the sandbox, so
     Flatpak Ardia can't start them (#3642). Setting Ardia as the default browser from Settings needs `xdg-settings`,
@@ -1033,11 +1034,17 @@ caller: sync keys, sealing and opening files and passwords, and the recovery phr
   ready, and Check Now and the app menu read Restart to Update. Every update toast has Later, which only closes it:
   the same version isn't offered again, and a dismissed Restart toast isn't shown again by another window. Where it can't (an engine without the methods, or
   `unsupported`), Check Now asks before opening the release page and an automatic check offers it once as a toast, and
-  the toggle is hidden. An install a package manager owns (`managed`: the AUR's `ardia-bin`, the `.rpm`, the Flatpak)
-  is told to update there and offered the release page (Open Release Page, or the toast's View): a Flatpak to
-  install the new `.flatpak`, the others the AUR command or the new `.rpm`. No command is copied: the `.rpm` and the
-  Flatpak bundle have no repository or remote to update from, and `ardia-update kind` says only `managed`, so the
-  dialog can't tell an AUR install apart (#4078). When Check Now runs in Settings and no regular window is open to show the page, a dialog gives
+  the toggle is hidden. An install a package manager owns (`managed`) is told how that manager updates it. `ardia-update
+  kind` says only `managed`, so each package names its manager in `lib/ardia/ardia-ui/package-manager.js`
+  (`export default "<manager>";`, served as `chrome://ardia/package-manager.js`), which the UI imports once per window,
+  and only when the kind is `managed`: the `.rpm` build writes `rpm` (`linux_formats.py`), the Flatpak manifest
+  `flatpak` and the AUR PKGBUILD `pacman`, and the tarball, `.deb` and AppImage ship none. The AUR package gets Copy
+  Command, which copies `yay -Syu ardia-bin` (the dialog and the toast also name your AUR helper). The `.rpm` and the
+  Flatpak bundle have no repository or remote to update from, so they get the release page (Open Release Page, or the
+  toast's View) and are told to install the new `.rpm` or `.flatpak`. Without a marker, or with one the UI doesn't
+  know (another dpkg package, a distribution's own package), it says to update with your package manager or offers
+  the release page. Neither the engine nor the helper's `kind` line changes for this, so today's engines keep
+  working. When Check Now runs in Settings and no regular window is open to show the page, a dialog gives
   its link with Copy Link instead. A failed download or install falls back to the release page once and isn't retried automatically.
 - **Self-update.** `ac_linux_self_update.cc` serves `ArdiaUpdates.installKind`, `update(version)`, `status()`,
   `claimOutcome(run)` and `restart`; the rules are in `ac_linux_self_update_policy.h`. The engine owns each run, so it
@@ -1073,8 +1080,10 @@ caller: sync keys, sealing and opening files and passwords, and the recovery phr
 - **Kill switches.** `ArdiaShell.fetchKillSwitches` fetches `ardia.dev/switches.json` (at most 16 KiB) once per
   browser process for every window, and the shared refresh runs under the Mac's rule (automatic checks on).
 - **Telemetry.** `update_checks_asked`, `update_checks_automatic`, `update_check_failures`, `update_checks_found`,
-  `update_release_page_opens`, `update_notices_dismissed`, `update_offers_managed_flatpak` and
-  `update_offers_managed_package` (a release offered to an install Flatpak or another package manager updates),
+  `update_release_page_opens`, `update_notices_dismissed`, `update_offers_managed_pacman`,
+  `update_offers_managed_rpm`, `update_offers_managed_flatpak` and `update_offers_managed_package` (a release offered
+  to an install a package manager updates, by the manager its marker names, `package` for none),
+  `update_commands_copied` (the AUR command copied from the dialog or the toast),
   `kill_switch_refreshes`, `kill_switch_refresh_failures`, and for self-update `update_downloads_started`,
   `update_downloads_finished`, `update_download_failures_<reason>`,
   `update_installs_<deb|tarball|appimage>`, `update_install_failures_<reason>` and `update_restarts`. Watch installs
